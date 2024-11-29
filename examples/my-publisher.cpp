@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
 #endif
     if (publisher_app.init()) {
         std::ofstream publisher_initialized_file;
-        publisher_initialized_file.open("/home/mehmet/vscode-workspaces/mininet-vsomeip/publisher-initialized");
+        publisher_initialized_file.open("/home/vm-user/workspace/mininet-vsomeip-evaluation/publisher-initialized");
         publisher_initialized_file.close();
         publisher_app.start();
         return 0;
