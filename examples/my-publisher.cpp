@@ -24,6 +24,19 @@ public:
             app_(vsomeip::runtime::get()->create_application()),
             is_registered_(false),
             cycle_(_cycle),
+            service_id_(SAMPLE_SERVICE_ID),
+            instance_id_(SAMPLE_INSTANCE_ID),
+            running_(true),
+            is_offered_(false),
+            notify_thread_(std::bind(&my_publisher_app::notify, this)) {
+    }
+    
+    my_publisher_app(uint32_t _cycle, uint16_t _service_id, uint16_t _instance_id) :
+            app_(vsomeip::runtime::get()->create_application()),
+            is_registered_(false),
+            cycle_(_cycle),
+            service_id_(_service_id),
+            instance_id_(_instance_id),
             running_(true),
             is_offered_(false),
             notify_thread_(std::bind(&my_publisher_app::notify, this)) {
@@ -41,8 +54,8 @@ public:
         std::set<vsomeip::eventgroup_t> its_groups;
         its_groups.insert(SAMPLE_EVENTGROUP_ID);
         app_->offer_event(
-                SAMPLE_SERVICE_ID,
-                SAMPLE_INSTANCE_ID,
+                service_id_,
+                instance_id_,
                 SAMPLE_EVENT_ID,
                 its_groups,
                 vsomeip::event_type_e::ET_FIELD, std::chrono::milliseconds::zero(),
@@ -82,13 +95,13 @@ public:
 
     void offer() {
         std::lock_guard<std::mutex> its_lock(notify_mutex_);
-        app_->offer_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
+        app_->offer_service(service_id_, instance_id_);
         is_offered_ = true;
         notify_condition_.notify_one();
     }
 
     void stop_offer() {
-        app_->stop_offer_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
+        app_->stop_offer_service(service_id_, instance_id_);
         is_offered_ = false;
     }
 
@@ -129,7 +142,7 @@ public:
                     std::lock_guard<std::mutex> its_lock(payload_mutex_);
                     payload_->set_data(its_data, its_size);
 
-                    app_->notify(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID, SAMPLE_EVENT_ID, payload_);
+                    app_->notify(service_id_, instance_id_, SAMPLE_EVENT_ID, payload_);
                 }
 
                 its_size++;
@@ -143,7 +156,8 @@ private:
     std::shared_ptr<vsomeip::application> app_;
     bool is_registered_;
     uint32_t cycle_;
-
+    uint16_t service_id_;
+    uint16_t instance_id_;
     bool running_;
 
     std::mutex notify_mutex_;
@@ -166,9 +180,13 @@ private:
 #endif
 
 int main(int argc, char **argv) {
-    uint32_t cycle = 1000; // default 1s
+    uint32_t cycle = 10000; // default 1s
+    uint16_t service_id = SAMPLE_SERVICE_ID;
+    uint16_t instance_id = SAMPLE_INSTANCE_ID;
 
     std::string cycle_arg("--cycle");
+    std::string service_arg("--serviceid");
+    std::string instance_arg("--instanceid");
 
     for (int i = 1; i < argc; i++) {
         if (cycle_arg == argv[i] && i + 1 < argc) {
@@ -177,9 +195,27 @@ int main(int argc, char **argv) {
             converter << argv[i];
             converter >> cycle;
         }
+        else if (service_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> service_id;
+        }
+        else if (instance_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> instance_id;
+        }
     }
 
-    my_publisher_app publisher_app(cycle);
+    std::cout << "Publisher settings [cycle=" << cycle << "ms, service_id="
+            << std::setw(4) << std::setfill('0') << std::hex << service_id
+            << ", instance_id="
+            << std::setw(4) << std::setfill('0') << std::hex << instance_id
+            << "]" << std::endl;
+
+    my_publisher_app publisher_app(cycle, service_id, instance_id);
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
     publisher_app_ptr = &publisher_app;
     signal(SIGINT, handle_signal);

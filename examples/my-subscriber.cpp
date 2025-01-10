@@ -19,8 +19,17 @@
 class my_subscriber_app {
 public:
     my_subscriber_app(bool _use_tcp) :
-            app_(vsomeip::runtime::get()->create_application()), use_tcp_(
-                    _use_tcp) {
+            app_(vsomeip::runtime::get()->create_application()), 
+            use_tcp_(_use_tcp), 
+            service_id_(SAMPLE_SERVICE_ID), 
+            instance_id_(SAMPLE_INSTANCE_ID) {
+    }
+
+    my_subscriber_app(bool _use_tcp, uint16_t _service_id, uint16_t _instance_id) :
+            app_(vsomeip::runtime::get()->create_application()), 
+            use_tcp_(_use_tcp), 
+            service_id_(_service_id), 
+            instance_id_(_instance_id) {
     }
 
     bool init() {
@@ -38,11 +47,11 @@ public:
                         std::placeholders::_1));
 
         app_->register_message_handler(
-                vsomeip::ANY_SERVICE, SAMPLE_INSTANCE_ID, vsomeip::ANY_METHOD,
+                vsomeip::ANY_SERVICE, instance_id_, vsomeip::ANY_METHOD,
                 std::bind(&my_subscriber_app::on_message, this,
                         std::placeholders::_1));
 
-        app_->register_availability_handler(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID,
+        app_->register_availability_handler(service_id_, instance_id_,
                 std::bind(&my_subscriber_app::on_availability,
                           this,
                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -50,12 +59,12 @@ public:
         std::set<vsomeip::eventgroup_t> its_groups;
         its_groups.insert(SAMPLE_EVENTGROUP_ID);
         app_->request_event(
-                SAMPLE_SERVICE_ID,
-                SAMPLE_INSTANCE_ID,
+                service_id_,
+                instance_id_,
                 SAMPLE_EVENT_ID,
                 its_groups,
                 vsomeip::event_type_e::ET_FIELD);
-        app_->subscribe(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID, SAMPLE_EVENTGROUP_ID);
+        app_->subscribe(service_id_, instance_id_, SAMPLE_EVENTGROUP_ID);
 
         return true;
     }
@@ -70,16 +79,16 @@ public:
      */
     void stop() {
         app_->clear_all_handler();
-        app_->unsubscribe(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID, SAMPLE_EVENTGROUP_ID);
-        app_->release_event(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID, SAMPLE_EVENT_ID);
-        app_->release_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
+        app_->unsubscribe(service_id_, instance_id_, SAMPLE_EVENTGROUP_ID);
+        app_->release_event(service_id_, instance_id_, SAMPLE_EVENT_ID);
+        app_->release_service(service_id_, instance_id_);
         app_->stop();
     }
 #endif
 
     void on_state(vsomeip::state_type_e _state) {
         if (_state == vsomeip::state_type_e::ST_REGISTERED) {
-            app_->request_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
+            app_->request_service(service_id_, instance_id_);
         }
     }
 
@@ -112,6 +121,8 @@ public:
 private:
     std::shared_ptr< vsomeip::application > app_;
     bool use_tcp_;
+    uint16_t service_id_;
+    uint16_t instance_id_;
 };
 
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
@@ -125,21 +136,44 @@ private:
 
 int main(int argc, char **argv) {
     bool use_tcp = false;
+    uint16_t service_id = SAMPLE_SERVICE_ID;
+    uint16_t instance_id = SAMPLE_INSTANCE_ID;
 
     std::string tcp_enable("--tcp");
     std::string udp_enable("--udp");
+    std::string service_arg("--serviceid");
+    std::string instance_arg("--instanceid");
 
-    int i = 1;
-    while (i < argc) {
+    for (int i = 1; i < argc; i++) {
         if (tcp_enable == argv[i]) {
             use_tcp = true;
-        } else if (udp_enable == argv[i]) {
+        } 
+        else if (udp_enable == argv[i]) {
             use_tcp = false;
         }
-        i++;
+        else if (service_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> service_id;
+        }
+        else if (instance_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> instance_id;
+        }
     }
+    std::cout << "Client settings [protocol="
+            << (use_tcp ? "TCP" : "UDP")
+            << ", service_id="
+            << std::setw(4) << std::setfill('0') << std::hex << service_id
+            << ", instance_id="
+            << std::setw(4) << std::setfill('0') << std::hex << instance_id
+            << "]"
+            << std::endl;
 
-    my_subscriber_app subscriber_app(use_tcp);
+    my_subscriber_app subscriber_app(use_tcp, service_id, instance_id);
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
     subscriber_app_ptr = &subscriber_app;
     signal(SIGINT, handle_signal);
