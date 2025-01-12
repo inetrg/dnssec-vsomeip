@@ -1511,7 +1511,7 @@ service_discovery_impl::process_serviceentry(
     ttl_t its_ttl = _entry->get_ttl();
 
     // Addition for statistics recording Start ###################################################################
-    if(unicast_.to_v4().to_string().compare("10.0.0.1") && its_type == entry_type_e::OFFER_SERVICE && its_ttl > 0) {
+    if(its_type == entry_type_e::OFFER_SERVICE && its_ttl > 0) {
         statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::OFFER_RECEIVE_);
         VSOMEIP_DEBUG << __func__ << " OFFER RECEIVE";
     }

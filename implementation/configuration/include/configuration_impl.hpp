@@ -135,6 +135,7 @@ public:
     VSOMEIP_EXPORT std::set<std::pair<port_t, port_t> > get_routing_guest_ports(
             uid_t _uid, gid_t _gid) const;
 
+    VSOMEIP_EXPORT bool is_publisher_application(const std::string &_name) const;
     VSOMEIP_EXPORT client_t get_id(const std::string &_name) const;
     VSOMEIP_EXPORT bool is_configured_client_id(client_t _id) const;
 

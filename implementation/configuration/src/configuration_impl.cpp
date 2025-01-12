@@ -994,6 +994,7 @@ void configuration_impl::load_application_data(
         const boost::property_tree::ptree &_tree, const std::string &_file_name) {
     std::string its_name("");
     client_t its_id(VSOMEIP_CLIENT_UNSET);
+    bool its_is_publisher(false);
     std::size_t its_max_dispatchers(VSOMEIP_MAX_DISPATCHERS);
     std::size_t its_max_dispatch_time(VSOMEIP_MAX_DISPATCH_TIME);
     std::size_t its_io_thread_count(VSOMEIP_IO_THREAD_COUNT);
@@ -1015,6 +1016,8 @@ void configuration_impl::load_application_data(
                 its_converter << std::dec << its_value;
             }
             its_converter >> its_id;
+        } else if (its_key == "is_publisher") {
+            its_is_publisher = (its_value == "true");
         } else if (its_key == "max_dispatchers") {
             its_converter << std::dec << its_value;
             its_converter >> its_max_dispatchers;
@@ -1072,6 +1075,7 @@ void configuration_impl::load_application_data(
 
             applications_[its_name] = {
                 its_id,
+                its_is_publisher,
                 its_max_dispatchers,
                 its_max_dispatch_time,
                 its_io_thread_count,
@@ -3118,6 +3122,16 @@ configuration_impl::is_local_routing() const {
     }
 
     return is_local;
+}
+
+bool 
+configuration_impl::is_publisher_application(const std::string &_name) const {
+    bool is_publisher(false);
+    auto found_application = applications_.find(_name);
+    if (found_application != applications_.end()) {
+        is_publisher = found_application->second.is_publisher_;
+    }
+    return is_publisher;
 }
 
 client_t configuration_impl::get_id(const std::string &_name) const {

@@ -137,6 +137,7 @@ public:
             std::chrono::milliseconds &_cycle,
             bool &_change_resets_cycle, bool &_update_on_change_) const = 0;
 
+    virtual bool is_publisher_application(const std::string &_name) const = 0;
     virtual client_t get_id(const std::string &_name) const = 0;
     virtual bool is_configured_client_id(client_t _id) const = 0;
 
