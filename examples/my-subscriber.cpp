@@ -164,14 +164,6 @@ int main(int argc, char **argv) {
             converter >> instance_id;
         }
     }
-    std::cout << "Client settings [protocol="
-            << (use_tcp ? "TCP" : "UDP")
-            << ", service_id="
-            << std::setw(4) << std::setfill('0') << std::hex << service_id
-            << ", instance_id="
-            << std::setw(4) << std::setfill('0') << std::hex << instance_id
-            << "]"
-            << std::endl;
 
     my_subscriber_app subscriber_app(use_tcp, service_id, instance_id);
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING

@@ -209,12 +209,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cout << "Publisher settings [cycle=" << cycle << "ms, service_id="
-            << std::setw(4) << std::setfill('0') << std::hex << service_id
-            << ", instance_id="
-            << std::setw(4) << std::setfill('0') << std::hex << instance_id
-            << "]" << std::endl;
-
     my_publisher_app publisher_app(cycle, service_id, instance_id);
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
     publisher_app_ptr = &publisher_app;
