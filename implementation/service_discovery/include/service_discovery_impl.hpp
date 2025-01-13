@@ -550,7 +550,7 @@ private:
     #endif
     #ifndef WITH_DANE
     const std::vector<CryptoPP::byte>& service_certificate_;
-    const std::map<std::string, std::vector<CryptoPP::byte>>& host_certificates_;
+    const std::map<std::string, std::vector<CryptoPP::byte>>& client_certificates_;
     #endif
 #endif
     // Additional members for statistics contribution Start #########################################################

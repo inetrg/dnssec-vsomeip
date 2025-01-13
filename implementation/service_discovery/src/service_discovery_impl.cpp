@@ -101,7 +101,7 @@ service_discovery_impl::service_discovery_impl(
       private_key_(configuration_->get_private_key())
     #ifndef WITH_DANE
       ,service_certificate_(configuration_->get_service_certificate()),
-      host_certificates_(configuration_->get_host_certificates())
+      client_certificates_(configuration_->get_client_certificates())
     #endif
     // Addition for Service Authentication End ##############################################################
 #endif
@@ -3050,8 +3050,8 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
     statistics_recorder_->record_timestamp(_subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_START_);
     bool requirements_are_fulfilled = false;
 #if !defined(WITH_DANE)
-    std::string host_id = "h"+std::to_string(_subscriber_ip_address.to_uint() - configuration_->get_network_address()); // host id depends on mininet
-    challenge_nonce_cache_->add_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance, host_certificates_.at(host_id));
+    std::string client_id_str = std::to_string(_client);
+    challenge_nonce_cache_->add_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance, client_certificates_.at(client_id_str));
 #endif
     std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance);
     std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_publisher_challenge_nonce(_client, _subscriber_ip_address, _service, _instance);

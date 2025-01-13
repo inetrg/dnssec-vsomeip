@@ -302,7 +302,7 @@ public:
     VSOMEIP_EXPORT const CryptoPP::RSA::PrivateKey& get_private_key() const;
     VSOMEIP_EXPORT const std::vector<CryptoPP::byte>& get_certificate() const;
     VSOMEIP_EXPORT const std::vector<CryptoPP::byte>& get_service_certificate() const;
-    VSOMEIP_EXPORT const std::map<std::string, std::vector<CryptoPP::byte>>& get_host_certificates() const;
+    VSOMEIP_EXPORT const std::map<std::string, std::vector<CryptoPP::byte>>& get_client_certificates() const;
     VSOMEIP_EXPORT uint32_t get_network_address() const;
     VSOMEIP_EXPORT uint32_t get_dns_server_ip() const;
     VSOMEIP_EXPORT size_t get_subscriber_count_to_record() const;
@@ -668,7 +668,7 @@ protected:
     std::vector<CryptoPP::byte> certificate_;
     CryptoPP::RSA::PrivateKey private_key_;
     std::vector<CryptoPP::byte> service_certificate_;
-    std::map<std::string, std::vector<CryptoPP::byte>> host_certificates_;
+    std::map<std::string, std::vector<CryptoPP::byte>> client_certificates_;
     uint32_t network_address_;
     uint32_t dns_server_ip_;
     size_t subscriber_count_to_record_;

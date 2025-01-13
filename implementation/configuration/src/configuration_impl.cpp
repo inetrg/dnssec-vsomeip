@@ -4547,11 +4547,30 @@ void configuration_impl::load_asymmetric_keys(const configuration_element& _elem
         crypto_operator_.load_pem_private_key(private_key_path, private_key_);
         service_certificate_ = crypto_operator_.load_certificate_from_file(service_certificate_path);
 
-        boost::property_tree::ptree host_certificate_paths_value = _element.tree_.get_child("client-certificates");
-        uint32_t client_id = 2; // client id starts from 2 in evaluation
-        for (auto host_certificate_path : host_certificate_paths_value) {
-            host_certificates_["h"+std::to_string(client_id)] = crypto_operator_.load_certificate_from_file(host_certificate_path.second.get_value<std::string>());
-            client_id++;
+        auto client_certificates_config = _element.tree_.get_child("client-certificates");
+        for (auto i = client_certificates_config.begin(); i != client_certificates_config.end(); ++i) {
+            std::string cert_path = "";
+            client_t client_id = 0;
+            for (auto j = i->second.begin(); j != i->second.end(); ++j) {
+                std::string its_key(j->first);
+                std::string its_value(j->second.data());
+                if (its_key == "certificate-path") {
+                    cert_path = its_value;
+                }
+                if (its_key == "id") {
+                    std::stringstream ss;
+                    if (its_value.find("0x") == 0) {
+                        ss << std::hex << its_value;
+                    } else {
+                        ss << std::dec << its_value;
+                    }
+                    ss >> client_id;
+                }
+            }
+            if (cert_path.empty() || client_id == 0) {
+                continue;
+            }
+            client_certificates_[std::to_string(client_id)] = crypto_operator_.load_certificate_from_file(cert_path);
         }
     } catch (...) {
         // intentionally left empty!
@@ -5130,8 +5149,8 @@ const std::vector<CryptoPP::byte>& configuration_impl::get_service_certificate()
     return service_certificate_;
 }
 
-const std::map<std::string, std::vector<CryptoPP::byte>>& configuration_impl::get_host_certificates() const {
-    return host_certificates_;
+const std::map<std::string, std::vector<CryptoPP::byte>>& configuration_impl::get_client_certificates() const {
+    return client_certificates_;
 }
 
 uint32_t configuration_impl::get_network_address() const {
