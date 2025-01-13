@@ -4547,7 +4547,7 @@ void configuration_impl::load_asymmetric_keys(const configuration_element& _elem
         crypto_operator_.load_pem_private_key(private_key_path, private_key_);
         service_certificate_ = crypto_operator_.load_certificate_from_file(service_certificate_path);
 
-        boost::property_tree::ptree host_certificate_paths_value = _element.tree_.get_child("host-certificates");
+        boost::property_tree::ptree host_certificate_paths_value = _element.tree_.get_child("client-certificates");
         uint32_t client_id = 2; // client id starts from 2 in evaluation
         for (auto host_certificate_path : host_certificate_paths_value) {
             host_certificates_["h"+std::to_string(client_id)] = crypto_operator_.load_certificate_from_file(host_certificate_path.second.get_value<std::string>());
