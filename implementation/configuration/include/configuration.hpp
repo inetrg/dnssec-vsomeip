@@ -125,6 +125,8 @@ public:
             std::map<bool, std::set<uint16_t> > &_used_client_ports, uint16_t &_client_port) const = 0;
 
     virtual std::set<std::pair<service_t, instance_t> > get_remote_services() const = 0;
+    virtual std::set<std::pair<service_t, instance_t> > get_local_services() const = 0;
+    virtual std::set<std::pair<service_t, instance_t> > get_required_services() const = 0;
 
     virtual bool get_multicast(service_t _service, instance_t _instance,
             eventgroup_t _eventgroup, std::string &_address, uint16_t &_port) const = 0;
@@ -137,7 +139,6 @@ public:
             std::chrono::milliseconds &_cycle,
             bool &_change_resets_cycle, bool &_update_on_change_) const = 0;
 
-    virtual bool is_publisher_application(const std::string &_name) const = 0;
     virtual client_t get_id(const std::string &_name) const = 0;
     virtual bool is_configured_client_id(client_t _id) const = 0;
 
@@ -315,13 +316,13 @@ public:
     virtual bool is_remote_access_allowed() const = 0;
 
     // Additional methods for service authentication
-    virtual const CryptoPP::RSA::PrivateKey& get_private_key() const = 0;
-    virtual const std::vector<CryptoPP::byte>& get_certificate() const = 0;
-    virtual const std::vector<CryptoPP::byte>& get_service_certificate() const = 0;
-    virtual const std::map<std::string, std::vector<CryptoPP::byte>>& get_client_certificates() const = 0;
+    virtual client_t get_client_id_for_service(service_t _service, instance_t _instance) const = 0;
+    virtual const CryptoPP::RSA::PrivateKey& get_service_private_key(service_t _service, instance_t _instance) const = 0; // get the private key from the service config
+    virtual const CryptoPP::RSA::PrivateKey& get_client_private_key(service_t _service, instance_t _instance) const = 0; // get the private key from the client config
+    virtual const std::vector<CryptoPP::byte>& get_service_certificate_for_client(service_t _service, instance_t _instance) const = 0; // get the service certificate from the client config
+    virtual const std::map<client_t, std::vector<CryptoPP::byte>>& get_client_certificates(service_t _service, instance_t _instance) const = 0;
     virtual uint32_t get_network_address() const = 0;
     virtual uint32_t get_dns_server_ip() const = 0;
-    virtual size_t get_subscriber_count_to_record() const = 0;
 };
 
 } // namespace vsomeip_v3

@@ -42,6 +42,10 @@ struct service {
     // SOME/IP-TP
     std::map<method_t, std::pair<uint16_t, uint32_t> > tp_client_config_;
     std::map<method_t, std::pair<uint16_t, uint32_t> > tp_service_config_;
+
+    // certificates
+    CryptoPP::RSA::PrivateKey private_key_;
+    std::map<client_t, std::vector<CryptoPP::byte>> client_certificates_;
 };
 
 } // namespace cfg

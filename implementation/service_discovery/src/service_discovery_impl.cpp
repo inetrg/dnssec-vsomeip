@@ -95,18 +95,7 @@ service_discovery_impl::service_discovery_impl(
       last_msg_received_timer_(_host->get_io()),
       last_msg_received_timer_timeout_(VSOMEIP_SD_DEFAULT_CYCLIC_OFFER_DELAY +
                                            (VSOMEIP_SD_DEFAULT_CYCLIC_OFFER_DELAY / 10))
-#ifdef WITH_SERVICE_AUTHENTICATION
-    // Addition for Service Authentication Start ############################################################
-      ,certificate_(configuration_->get_certificate()),
-      private_key_(configuration_->get_private_key())
-    #ifndef WITH_DANE
-      ,service_certificate_(configuration_->get_service_certificate()),
-      client_certificates_(configuration_->get_client_certificates())
-    #endif
-    // Addition for Service Authentication End ##############################################################
-#endif
        {
-
     next_subscription_expiration_ = std::chrono::steady_clock::now() + std::chrono::hours(24);
 }
 
@@ -1029,7 +1018,7 @@ service_discovery_impl::create_eventgroup_entry(
     // Addition for timestamp recording Start ###########################################################
     if(_subscription->get_ttl()) {
         VSOMEIP_DEBUG << __func__ << " SUBSCRIBE SEND";
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_SEND_);
+        statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_SEND_);
     }
     // Addition for timestamp recording End #############################################################
     return its_data;
@@ -1073,8 +1062,8 @@ service_discovery_impl::process_authentication_for_created_subscribe(
 #if defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
         // Signing blinded secret and nonce from publisher and add signature
         VSOMEIP_DEBUG << __func__ << " CLIENT SIGN START";
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::CLIENT_SIGN_START_);
-        client_t client = configuration_->get_id(std::string(getenv(VSOMEIP_ENV_APPLICATION_NAME)));
+        statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::CLIENT_SIGN_START_);
+        client_t client = configuration_->get_client_id_for_service(_service, _instance);
         std::vector<unsigned char> signed_nonce_vector = challenge_nonce_cache_->get_publisher_challenge_nonce(client, publisher_address.to_v4(), _service, _instance);
         if (signed_nonce_vector.empty()) {
             // TODO: Better would be to return here and check on the receiving node if the required conf option is included
@@ -1092,12 +1081,13 @@ service_discovery_impl::process_authentication_for_created_subscribe(
     #ifdef WITH_ENCRYPTION
         data_to_be_signed.insert(data_to_be_signed.end(), blinded_secret_vector.begin(), blinded_secret_vector.end());
     #endif
-        std::vector<CryptoPP::byte> signature = crypto_operator_.sign(private_key_, data_to_be_signed);
+        auto private_key = configuration_->get_client_private_key(_service,_instance);
+        std::vector<CryptoPP::byte> signature = crypto_operator_.sign(private_key, data_to_be_signed);
         data_partitioner().partition_data<std::vector<unsigned char>>(SIGNATURE_CONFIG_OPTION_KEY, configuration_option, signature);
         // Add client id
         std::string client_id(std::to_string(client));
         data_partitioner().partition_data<std::vector<unsigned char>>(CLIENT_ID_CONFIG_OPTION_KEY, configuration_option, std::vector<unsigned char>(client_id.begin(), client_id.end()));
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::CLIENT_SIGN_END_);
+        statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::CLIENT_SIGN_END_);
         VSOMEIP_DEBUG << __func__ << " CLIENT SIGN END";
 #endif
         its_data.options_.push_back(configuration_option);
@@ -1211,12 +1201,12 @@ service_discovery_impl::insert_subscription_ack(
     {
         std::lock_guard<std::mutex> contribution_guard(contribution_mutex);
         if(_ttl) {
-            VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK SEND";
-            statistics_recorder_->record_timestamp(subscriber_address.to_uint(), time_metric::SUBSCRIBE_ACK_SEND_);
+            VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK SEND";            
+            statistics_recorder_->record_timestamp_for_service(its_service, subscriber_address.to_uint(), time_metric::SUBSCRIBE_ACK_SEND_);
             recorded_subscribers.insert(subscriber_address.to_uint());
         }
 
-        if(!already_contributed && (recorded_subscribers.size() == configuration_->get_subscriber_count_to_record())) {
+        if(!already_contributed && (recorded_subscribers.size() == configuration_->get_client_certificates(its_service, its_instance).size())) {
             VSOMEIP_DEBUG << __func__ << " CONTRIBUTING STATISTICS";
             statistics_contributor_ = std::thread(&statistics_recorder::contribute_statistics, statistics_recorder_);
             already_contributed = true;
@@ -1236,7 +1226,7 @@ service_discovery_impl::process_authentication_for_created_subscribe_ack(ttl_t _
         std::shared_ptr<configuration_option_impl> configuration_option = std::make_shared<configuration_option_impl>();
         // Signing nonce from subscriber and add signature
         VSOMEIP_DEBUG << __func__ << " SERVICE SIGN START";
-        statistics_recorder_->record_timestamp(_subscriber_address.to_uint(), time_metric::SERVICE_SIGN_START_);
+        statistics_recorder_->record_timestamp_for_service(_service, _subscriber_address.to_uint(), time_metric::SERVICE_SIGN_START_);
         std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_subscriber_challenge_nonce(_subscriber_address, _service, _instance);
         if (signed_nonce.empty()) {
             // TODO: Better would be to return here and cancel sending the subscription acknowledge
@@ -1261,10 +1251,11 @@ service_discovery_impl::process_authentication_for_created_subscribe_ack(ttl_t _
         data_to_be_signed.insert(data_to_be_signed.end(), encrypted_group_secret.begin(), encrypted_group_secret.end());
         data_to_be_signed.insert(data_to_be_signed.end(), initialization_vector.begin(), initialization_vector.end());
 #endif
-        std::vector<CryptoPP::byte> signature = crypto_operator_.sign(private_key_, data_to_be_signed);
+        auto private_key = configuration_->get_service_private_key(_service, _instance);
+        std::vector<CryptoPP::byte> signature = crypto_operator_.sign(private_key, data_to_be_signed);
         data_partitioner().partition_data<std::vector<unsigned char>>(SIGNATURE_CONFIG_OPTION_KEY, configuration_option, signature);
         VSOMEIP_DEBUG << __func__ << " SERVICE SIGN END";
-        statistics_recorder_->record_timestamp(_subscriber_address.to_uint(), time_metric::SERVICE_SIGN_END_);
+        statistics_recorder_->record_timestamp_for_service(_service, _subscriber_address.to_uint(), time_metric::SERVICE_SIGN_END_);
         _its_data.options_.push_back(configuration_option);
     }
     // Service Authentication End ########################################################################################
@@ -1511,9 +1502,21 @@ service_discovery_impl::process_serviceentry(
     ttl_t its_ttl = _entry->get_ttl();
 
     // Addition for statistics recording Start ###################################################################
-    if(its_type == entry_type_e::OFFER_SERVICE && its_ttl > 0) {
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::OFFER_RECEIVE_);
-        VSOMEIP_DEBUG << __func__ << " OFFER RECEIVE";
+    
+    // bool is_requested = false;
+    // {
+    //     std::lock_guard<std::mutex> its_lock(requested_mutex_);
+    //     is_requested = requested_.count(its_service) > 0;
+    // }
+    auto required_services = configuration_->get_required_services();
+    for (auto& service : required_services) {
+        if (service.first == its_service && service.second == its_instance) {
+    // if (is_requested) { // only log offer time-stamps for requested services
+            if(its_type == entry_type_e::OFFER_SERVICE && its_ttl > 0) {
+                statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::OFFER_RECEIVE_);
+                VSOMEIP_DEBUG << __func__ << " OFFER RECEIVE";
+            }
+        }
     }
     // Addition for statistics recording End #####################################################################
 
@@ -1608,7 +1611,7 @@ service_discovery_impl::process_serviceentry(
                 } else {
                     publisher_address = its_reliable_address;
                 }
-                challenge_nonce_cache_->add_publisher_challenge_nonce(configuration_->get_id(std::string(getenv(VSOMEIP_ENV_APPLICATION_NAME))), publisher_address.to_v4(), its_service, its_instance, generated_nonce);
+                challenge_nonce_cache_->add_publisher_challenge_nonce(configuration_->get_client_id_for_service(its_service, its_instance), publisher_address.to_v4(), its_service, its_instance, generated_nonce);
                 // Service Authentication End ############################################################################
 #endif
                 process_offerservice_serviceentry(its_service, its_instance,
@@ -1901,7 +1904,14 @@ service_discovery_impl::process_offerservice_serviceentry(
     // Service Authentication Start ##########################################################################
     resume_process_offerservice_cache_->add_offerservice_entry(_service, _instance, _major, _minor, _ttl, boost::asio::ip::address_v4::from_string(_reliable_address.to_string()), _reliable_port, boost::asio::ip::address_v4::from_string(_unreliable_address.to_string()), _unreliable_port, _resubscribes, _received_via_mcast);
 #ifndef NO_SOMEIP_SD
-    validate_offer(_service, _instance, _major, _minor);
+    // bool is_requested = false;
+    // {
+    //     std::lock_guard<std::mutex> its_lock(requested_mutex_);
+    //     is_requested = requested_.count(_service) > 0;
+    // }
+    // if (is_requested) {
+        validate_offer(_service, _instance, _major, _minor);
+    // } 
 #endif
     // Service Authentication End ############################################################################
 }
@@ -1913,9 +1923,8 @@ service_discovery_impl::validate_offer(service_t _service, instance_t _instance,
     VSOMEIP_DEBUG << __func__ << " VALIDATE OFFER START";
     service_svcb_cache_entry service_svcbcache_entry = svcb_cache_->get_service_svcb_cache_entry(_service, _instance, _major, _minor);
     if(resume_processofferservice_entry.ttl_)
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::VALIDATE_OFFER_START_);
     bool offer_verified = false;
-
+    uint64_t validation_start_time = static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());    
     offer_verified = (resume_processofferservice_entry.service_ == service_svcbcache_entry.service_)
         && (resume_processofferservice_entry.instance_ == service_svcbcache_entry.instance_)
         && (resume_processofferservice_entry.major_ == service_svcbcache_entry.major_)
@@ -1928,9 +1937,11 @@ service_discovery_impl::validate_offer(service_t _service, instance_t _instance,
     if (!offer_verified) {
         return;
     }
-    if(resume_processofferservice_entry.ttl_)
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::VALIDATE_OFFER_END_);
-    VSOMEIP_DEBUG << __func__ << " VALIDATE OFFER END";
+    if(resume_processofferservice_entry.ttl_) {
+        statistics_recorder_->record_custom_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VALIDATE_OFFER_START_, validation_start_time);
+        statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VALIDATE_OFFER_END_);
+    }
+    VSOMEIP_DEBUG << __func__ << " VALIDATE OFFER END " << " service=" << _service;
 #endif
     resume_process_offerservice_serviceentry(resume_processofferservice_entry.service_, resume_processofferservice_entry.instance_, resume_processofferservice_entry.major_, resume_processofferservice_entry.minor_, resume_processofferservice_entry.ttl_, resume_processofferservice_entry.reliable_address_, resume_processofferservice_entry.reliable_port_, resume_processofferservice_entry.unreliable_address_, resume_processofferservice_entry.unreliable_port_, resume_processofferservice_entry.resubscribes_, resume_processofferservice_entry.received_via_mcast_);
     resume_process_offerservice_cache_->remove_offerservice_entry(_service, _instance, _major, _minor);
@@ -2458,13 +2469,13 @@ service_discovery_impl::process_eventgroupentry(
 
     if (entry_type_e::SUBSCRIBE_EVENTGROUP == its_type && its_ttl > 0) {
         VSOMEIP_DEBUG << __func__ << " SUBSCRIBE RECEIVE";
-        statistics_recorder_->record_timestamp(_sender.to_v4().to_uint(), time_metric::SUBSCRIBE_RECEIVE_);
+        statistics_recorder_->record_timestamp_for_service(its_service, _sender.to_v4().to_uint(), time_metric::SUBSCRIBE_RECEIVE_);
     }
 
 #ifdef WITH_SERVICE_AUTHENTICATION
     if (entry_type_e::SUBSCRIBE_EVENTGROUP_ACK == its_type && its_ttl > 0) {
         VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE";
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
+        statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
     }
 
 #else
@@ -2476,7 +2487,7 @@ service_discovery_impl::process_eventgroupentry(
         {
             std::lock_guard<std::mutex> contribution_guard(contribution_mutex);
             VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE";
-            statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
+            statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
 
             if(!already_contributed) {
                 VSOMEIP_DEBUG << __func__ << " CONTRIBUTING STATISTICS";
@@ -3005,9 +3016,10 @@ service_discovery_impl::process_authentication_for_received_subscribe(
                                                 std::placeholders::_3,
                                                 std::placeholders::_4,
                                                 std::placeholders::_5);
-        clientdata_and_cbs->record_timestamp_callback_ = std::bind(&statistics_recorder::record_timestamp, statistics_recorder_,
-                                                std::placeholders::_1,
-                                                std::placeholders::_2);
+        clientdata_and_cbs->record_timestamp_callback_ = std::bind(&statistics_recorder::record_timestamp_for_service, statistics_recorder_,
+                                            std::placeholders::_1,
+                                            std::placeholders::_2,
+                                            std::placeholders::_3);
         clientdata_and_cbs->convert_der_to_pem_callback_ = std::bind(&crypto_operator::convert_der_to_pem, &crypto_operator_,
                                                 std::placeholders::_1);
         tlsa_resolver_->request_client_tlsa_record(clientdata_and_cbs);
@@ -3047,11 +3059,11 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
         const std::shared_ptr<eventgroupinfo>& _info,  const std::vector<unsigned char>& _signed_nonce,
         const std::vector<unsigned char>& _blinded_secret, const std::vector<unsigned char>& _signature) {
     VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE START";
-    statistics_recorder_->record_timestamp(_subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_START_);
+    uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
     bool requirements_are_fulfilled = false;
 #if !defined(WITH_DANE)
-    std::string client_id_str = std::to_string(_client);
-    challenge_nonce_cache_->add_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance, client_certificates_.at(client_id_str));
+    auto client_certificates = configuration_->get_client_certificates(_service, _instance);
+    challenge_nonce_cache_->add_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance, client_certificates.at(_client));
 #endif
     std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance);
     std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_publisher_challenge_nonce(_client, _subscriber_ip_address, _service, _instance);
@@ -3084,7 +3096,8 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
         return;
     }
     VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE END";
-    statistics_recorder_->record_timestamp(_subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_END_);
+    statistics_recorder_->record_custom_timestamp_for_service(_service, _subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_START_, verify_start_time);
+    statistics_recorder_->record_timestamp_for_service(_service, _subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_END_);
 #ifdef WITH_ENCRYPTION
     VSOMEIP_DEBUG << __func__ << " COMPUTE ENCRYPTED GROUP SECRET";
     encrypted_group_secret_result encrypted_groupsecret_result = dh_ecc_->compute_encrypted_group_secret(CryptoPP::SecByteBlock(blinded_secret.data(), blinded_secret.size()));
@@ -3110,7 +3123,7 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
 void
 service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio::ip::address_v4 _publisher_ip_address, service_t _service, instance_t _instance, major_version_t _major) {
     VSOMEIP_DEBUG << __func__ << " VERIFY SERVICE SIGNATURE START";
-    statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_START_);
+    uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
     // Check if required subscription ack, signature and certificate are available/cached
     bool requirements_are_fulfilled = false;
 #if defined(WITH_DNSSEC)
@@ -3118,7 +3131,8 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
 #endif
 
 #ifndef WITH_DANE
-    challenge_nonce_cache_->add_publisher_certificate(_publisher_ip_address, _service, _instance, service_certificate_);
+    auto service_certificate = configuration_->get_service_certificate_for_client(_service, _instance);
+    challenge_nonce_cache_->add_publisher_certificate(_publisher_ip_address, _service, _instance, service_certificate);
 #endif
 
     std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_publisher_certificate(_publisher_ip_address, _service, _instance);
@@ -3181,7 +3195,8 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
     {
         std::lock_guard<std::mutex> contribution_guard(contribution_mutex);
         VSOMEIP_DEBUG << __func__ << " VERIFY SERVICE SIGNATURE END";
-        statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_END_);
+        statistics_recorder_->record_custom_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_START_, verify_start_time);
+        statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_END_);
 
         if(!already_contributed) {
             statistics_recorder_->contribute_statistics();
@@ -3822,7 +3837,9 @@ service_discovery_impl::on_find_debounce_timer_expired(
     insert_find_entries(its_messages, repetition_phase_finds);
     send(its_messages);
     // Addition for FIND_SEND timestamp recording Start ########################################
-    statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::FIND_SEND_);
+    for (const auto& its_service : repetition_phase_finds) {
+        statistics_recorder_->record_timestamp_for_service(its_service.first, unicast_.to_v4().to_uint(), time_metric::FIND_SEND_);
+    }
     VSOMEIP_DEBUG << __func__ << " FIND SEND";
     // Addition for FIND_SEND timestamp recording End ##########################################
 
@@ -4030,7 +4047,9 @@ service_discovery_impl::on_find_repetition_phase_timer_expired(
             insert_find_entries(its_messages, its_timer_pair->second);
             send(its_messages);
             // Addition for FIND_SEND timestamp recording Start ########################################
-            statistics_recorder_->record_timestamp(unicast_.to_v4().to_uint(), time_metric::FIND_SEND_);
+            for (const auto& its_service : its_timer_pair->second) {
+                statistics_recorder_->record_timestamp_for_service(its_service.first, unicast_.to_v4().to_uint(), time_metric::FIND_SEND_);
+            }
             // Addition for FIND_SEND timestamp recording End ##########################################
             new_delay = std::chrono::milliseconds(_last_delay * 2);
             repetition = ++_repetition;

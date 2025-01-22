@@ -60,7 +60,7 @@
 #include <functional>
 #include <utility>
 
-//Typedefs of allocators and containers
+// Typedefs of allocators and containers
 typedef boost::interprocess::managed_shared_memory::segment_manager                                               segment_manager_t;
 typedef boost::interprocess::allocator<void, segment_manager_t>                                                   void_allocator;
 typedef std::uint32_t                                                                                             metric_key_t;
@@ -77,11 +77,26 @@ class metrics_map_data {
       {}
 };
 
-//Definition of the <host,metrics> map holding an uint32_t as key and metrics_map_data as mapped type
+// Definition of the <host,metrics> map holding an uint32_t as key and metrics_map_data as mapped type
 typedef std::uint32_t                                                                                                   host_key_t;
 typedef std::pair<const host_key_t, metrics_map_data>                                                                   shared_statistics_map_value_t;
 typedef boost::interprocess::allocator<shared_statistics_map_value_t, segment_manager_t>                                shared_statistics_map_allocator;
 typedef boost::interprocess::map<host_key_t, metrics_map_data, std::less<host_key_t>, shared_statistics_map_allocator>  shared_statistics_map;
+
+class statistics_map_data {
+   public:
+      shared_statistics_map statistics_map_;
+      statistics_map_data(const void_allocator& void_allocator_instance)
+         : statistics_map_(void_allocator_instance)
+      {}
+};
+
+// Definition of the <service,shared_statistics> map holding an uint32_t as key and shared_statistics_map as mapped type
+typedef std::uint16_t                                                                                                   service_id_t;
+typedef std::pair<const service_id_t, statistics_map_data>                                                            service_statistics_map_value_t;
+typedef boost::interprocess::allocator<service_statistics_map_value_t, segment_manager_t>                               service_statistics_map_allocator;
+typedef boost::interprocess::map<service_id_t, statistics_map_data, std::less<service_id_t>, service_statistics_map_allocator> service_statistics_map;
+
 
 enum time_metric {
     PUBLISHER_APP_INITIALIZATION_,

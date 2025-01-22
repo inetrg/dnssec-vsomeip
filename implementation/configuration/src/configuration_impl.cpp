@@ -606,10 +606,8 @@ bool configuration_impl::load_data(const std::vector<configuration_element> &_el
             load_routing_client_ports(e);
             load_suppress_events(e);
             // Additional methods for service authentication
-            load_asymmetric_keys(e);
             compute_network_address();
             load_dns_server_ip(e);
-            load_subscriber_count_to_record(e);
         }
     }
 
@@ -994,7 +992,6 @@ void configuration_impl::load_application_data(
         const boost::property_tree::ptree &_tree, const std::string &_file_name) {
     std::string its_name("");
     client_t its_id(VSOMEIP_CLIENT_UNSET);
-    bool its_is_publisher(false);
     std::size_t its_max_dispatchers(VSOMEIP_MAX_DISPATCHERS);
     std::size_t its_max_dispatch_time(VSOMEIP_MAX_DISPATCH_TIME);
     std::size_t its_io_thread_count(VSOMEIP_IO_THREAD_COUNT);
@@ -1016,8 +1013,6 @@ void configuration_impl::load_application_data(
                 its_converter << std::dec << its_value;
             }
             its_converter >> its_id;
-        } else if (its_key == "is_publisher") {
-            its_is_publisher = (its_value == "true");
         } else if (its_key == "max_dispatchers") {
             its_converter << std::dec << its_value;
             its_converter >> its_max_dispatchers;
@@ -1075,7 +1070,6 @@ void configuration_impl::load_application_data(
 
             applications_[its_name] = {
                 its_id,
-                its_is_publisher,
                 its_max_dispatchers,
                 its_max_dispatch_time,
                 its_io_thread_count,
@@ -2030,7 +2024,34 @@ void configuration_impl::load_service(
             std::string its_value(i->second.data());
             std::stringstream its_converter;
 
-            if (its_key == "unicast") {
+            if (its_key == "private-key-path") {
+                crypto_operator_.load_pem_private_key(its_value, its_service->private_key_);
+            } else if (its_key == "client-certificates") {
+                for (auto j = i->second.begin(); j != i->second.end(); ++j) {
+                    std::string cert_path = "";
+                    client_t client_id = 0;
+                    for (auto k = j->second.begin(); k != j->second.end(); ++k) {
+                        std::string inner_key(k->first);
+                        std::string inner_value(k->second.data());
+                        if (inner_key == "certificate-path") {
+                            cert_path = inner_value;
+                        }
+                        if (inner_key== "id") {
+                            std::stringstream ss;
+                            if (inner_value.find("0x") == 0) {
+                                ss << std::hex << inner_value;
+                            } else {
+                                ss << std::dec << inner_value;
+                            }
+                            ss >> client_id;
+                        }
+                    }
+                    if (cert_path.empty() || client_id == 0) {
+                        continue;
+                    }
+                    its_service->client_certificates_[client_id] = crypto_operator_.load_certificate_from_file(cert_path);
+                }
+            } else if (its_key == "unicast") {
                 its_service->unicast_address_ = its_value;
             } else if (its_key == "reliable") {
                 try {
@@ -2414,6 +2435,11 @@ void configuration_impl::load_client(const boost::property_tree::ptree &_tree) {
                 its_client->ports_[true] = load_client_ports(i->second);
             } else if (its_key == "unreliable") {
                 its_client->ports_[false] = load_client_ports(i->second);
+            //security credentials
+            } else if (its_key == "private-key-path") {
+                crypto_operator_.load_pem_private_key(its_value, its_client->private_key_);
+            } else if (its_key == "service-certificate-path") {
+                its_client->service_certificate_ = crypto_operator_.load_certificate_from_file(its_value);
             } else {
                 // Trim "its_value"
                 if (its_value.size() > 1 && its_value[0] == '0' && its_value[1] == 'x') {
@@ -2426,6 +2452,8 @@ void configuration_impl::load_client(const boost::property_tree::ptree &_tree) {
                     its_converter >> its_client->service_;
                 } else if (its_key == "instance") {
                     its_converter >> its_client->instance_;
+                } else if (its_key == "client-id") {
+                    its_converter >> its_client->client_id_;
                 }
             }
         }
@@ -3124,16 +3152,6 @@ configuration_impl::is_local_routing() const {
     return is_local;
 }
 
-bool 
-configuration_impl::is_publisher_application(const std::string &_name) const {
-    bool is_publisher(false);
-    auto found_application = applications_.find(_name);
-    if (found_application != applications_.end()) {
-        is_publisher = found_application->second.is_publisher_;
-    }
-    return is_publisher;
-}
-
 client_t configuration_impl::get_id(const std::string &_name) const {
     client_t its_client(VSOMEIP_CLIENT_UNSET);
 
@@ -3229,6 +3247,29 @@ configuration_impl::get_remote_services() const {
         }
     }
     return its_remote_services;
+}
+
+std::set<std::pair<service_t, instance_t> >
+configuration_impl::get_local_services() const {
+    std::lock_guard<std::mutex> its_lock(services_mutex_);
+    std::set<std::pair<service_t, instance_t> > its_local_services;
+    for (const auto& i : services_) {
+        for (const auto& j : i.second) {
+            if (!is_remote(j.second)) {
+                its_local_services.insert(std::make_pair(i.first, j.first));
+            }
+        }
+    }
+    return its_local_services;
+}
+
+std::set<std::pair<service_t, instance_t> >
+configuration_impl::get_required_services() const {
+    std::set<std::pair<service_t, instance_t> > its_required_services;
+    for (const auto& client: clients_) {
+        its_required_services.insert(std::make_pair(client->service_, client->instance_));
+    }
+    return its_required_services;
 }
 
 bool configuration_impl::is_mandatory(const std::string &_name) const {
@@ -4537,46 +4578,6 @@ void configuration_impl::load_secure_services(const configuration_element &_elem
     }
 }
 
-void configuration_impl::load_asymmetric_keys(const configuration_element& _element) {
-    try {
-        std::string certificate_path = _element.tree_.get<std::string>("certificate-path");
-        std::string private_key_path = _element.tree_.get<std::string>("private-key-path");
-        std::string service_certificate_path = _element.tree_.get<std::string>("service-certificate-path");
-
-        certificate_ = crypto_operator_.load_certificate_from_file(certificate_path);
-        crypto_operator_.load_pem_private_key(private_key_path, private_key_);
-        service_certificate_ = crypto_operator_.load_certificate_from_file(service_certificate_path);
-
-        auto client_certificates_config = _element.tree_.get_child("client-certificates");
-        for (auto i = client_certificates_config.begin(); i != client_certificates_config.end(); ++i) {
-            std::string cert_path = "";
-            client_t client_id = 0;
-            for (auto j = i->second.begin(); j != i->second.end(); ++j) {
-                std::string its_key(j->first);
-                std::string its_value(j->second.data());
-                if (its_key == "certificate-path") {
-                    cert_path = its_value;
-                }
-                if (its_key == "id") {
-                    std::stringstream ss;
-                    if (its_value.find("0x") == 0) {
-                        ss << std::hex << its_value;
-                    } else {
-                        ss << std::dec << its_value;
-                    }
-                    ss >> client_id;
-                }
-            }
-            if (cert_path.empty() || client_id == 0) {
-                continue;
-            }
-            client_certificates_[std::to_string(client_id)] = crypto_operator_.load_certificate_from_file(cert_path);
-        }
-    } catch (...) {
-        // intentionally left empty!
-    }
-}
-
 void configuration_impl::compute_network_address() {
     try {
         network_address_ = unicast_.to_v4().to_uint() & netmask_.to_v4().to_uint();
@@ -4595,21 +4596,6 @@ void configuration_impl::load_dns_server_ip(const configuration_element& _elemen
             its_converter << std::dec << dns_server_ip;
         }
         its_converter >> dns_server_ip_;
-    } catch (...) {
-        // intentionally left empty!
-    }
-}
-
-void configuration_impl::load_subscriber_count_to_record(const configuration_element& _element) {
-    try {
-        std::stringstream its_converter;
-        std::string subscriber_count_to_record = _element.tree_.get<std::string>("subscriber-count-to-record");
-        if (!subscriber_count_to_record.empty() && subscriber_count_to_record[0] == '0' && subscriber_count_to_record[1] == 'x') {
-            its_converter << std::hex << subscriber_count_to_record;
-        } else {
-            its_converter << std::dec << subscriber_count_to_record;
-        }
-        its_converter >> subscriber_count_to_record_;
     } catch (...) {
         // intentionally left empty!
     }
@@ -5137,20 +5123,50 @@ configuration_impl::is_remote_access_allowed() const {
 }
 
 // Additional methods for service authentication
-const CryptoPP::RSA::PrivateKey& configuration_impl::get_private_key() const {
-    return private_key_;
+const CryptoPP::RSA::PrivateKey& configuration_impl::get_service_private_key(service_t _service, instance_t _instance) const {
+    CryptoPP::RSA::PrivateKey private_key;
+    auto service = find_service(_service, _instance);
+    if (service) {
+        return service->private_key_;
+    }
+    return private_key;
 }
 
-const std::vector<CryptoPP::byte>& configuration_impl::get_certificate() const {
-    return certificate_;
+client_t configuration_impl::get_client_id_for_service(service_t _service, instance_t _instance) const {
+    client_t client_id = 0;
+    auto client = find_client(_service, _instance);
+    if (client) {
+        return client->client_id_;
+    }
+    return get_id(getenv(VSOMEIP_ENV_APPLICATION_NAME));
 }
 
-const std::vector<CryptoPP::byte>& configuration_impl::get_service_certificate() const {
-    return service_certificate_;
+const CryptoPP::RSA::PrivateKey& configuration_impl::get_client_private_key(
+    service_t _service, instance_t _instance) const {
+    CryptoPP::RSA::PrivateKey private_key;
+    auto client = find_client(_service, _instance);
+    if (client) {
+        return client->private_key_;
+    }
+    return private_key;
 }
 
-const std::map<std::string, std::vector<CryptoPP::byte>>& configuration_impl::get_client_certificates() const {
-    return client_certificates_;
+const std::vector<CryptoPP::byte>& configuration_impl::get_service_certificate_for_client(service_t _service, instance_t _instance) const {
+    std::vector<CryptoPP::byte> cert;
+    auto client = find_client(_service, _instance);
+    if (client) {
+        return client->service_certificate_;
+    }
+    return cert;
+}
+
+const std::map<client_t, std::vector<CryptoPP::byte>>& configuration_impl::get_client_certificates(service_t _service, instance_t _instance) const {
+    std::map<client_t, std::vector<CryptoPP::byte>> certs;
+    auto service = find_service(_service, _instance);
+    if (service) {
+        return service->client_certificates_;
+    }
+    return certs;
 }
 
 uint32_t configuration_impl::get_network_address() const {
@@ -5159,10 +5175,6 @@ uint32_t configuration_impl::get_network_address() const {
 
 uint32_t configuration_impl::get_dns_server_ip() const {
     return dns_server_ip_;
-}
-
-size_t configuration_impl::get_subscriber_count_to_record() const {
-    return subscriber_count_to_record_;
 }
 
 }  // namespace cfg

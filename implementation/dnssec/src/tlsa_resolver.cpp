@@ -18,24 +18,24 @@ namespace vsomeip_v3 {
         service_data_and_cbs* servicedata_and_cbs = reinterpret_cast<service_data_and_cbs*>(_data);
         
         if (_status) {
-            std::cerr << __func__ << " Bad DNS response" << std::endl;
+            VSOMEIP_DEBUG << __func__ << " Bad DNS response" << std::endl;
             delete servicedata_and_cbs;
             return;
         }
 
         if (_timeouts) {
-            std::cerr << __func__ << " DNS request timeout" << std::endl;
+            VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
             delete servicedata_and_cbs;
             return;
         }
         VSOMEIP_DEBUG << __func__ << " TLSA SERVICE RESPONSE RECEIVE";
-        servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->its_unicast_.to_uint(), time_metric::TLSA_SERVICE_RESPONSE_RECEIVE_);
+        servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->service_, servicedata_and_cbs->its_unicast_.to_uint(), time_metric::TLSA_SERVICE_RESPONSE_RECEIVE_);
 
         unsigned char* copy = new unsigned char[_alen];
         memcpy(copy, _abuf, _alen);
         tlsa_reply* tlsareply;
         if ((parse_tlsa_reply(copy, _alen, &tlsareply)) != ARES_SUCCESS) {
-            std::cerr << "Parsing service TLSA reply failed" << std::endl;
+            VSOMEIP_DEBUG << "Parsing service TLSA reply failed" << std::endl;
             delete servicedata_and_cbs;
             delete[] copy;
             delete_tlsa_reply(tlsareply);
@@ -48,6 +48,7 @@ namespace vsomeip_v3 {
             servicedata_and_cbs->validate_subscribe_ack_and_verify_signature_callback_(servicedata_and_cbs->ipv4_address_, servicedata_and_cbs->service_, servicedata_and_cbs->instance_, servicedata_and_cbs->major_);
             tlsa_reply_ptr = tlsa_reply_ptr->tlsa_reply_next_;
         }
+        VSOMEIP_DEBUG << "Service TLSA Resolved Service: " << servicedata_and_cbs->service_;
         delete servicedata_and_cbs;
         delete[] copy;
         delete_tlsa_reply(tlsareply);
@@ -56,28 +57,29 @@ namespace vsomeip_v3 {
     void client_tlsa_resolve_callback(void* _data, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
         client_data_and_cbs* clientdata_and_cbs = reinterpret_cast<client_data_and_cbs*>(_data);
-        
+        VSOMEIP_DEBUG << __func__ << " TLSA CLIENT RESPONSE RECEIVE";
         if (_status) {
-            std::cerr << __func__ << " Bad DNS response" << std::endl;
+            VSOMEIP_DEBUG << __func__ << " Bad DNS response" << std::endl;
             clientdata_and_cbs->notify_waiting_thread();
             delete clientdata_and_cbs;
             return;
         }
 
         if (_timeouts) {
-            std::cerr << __func__ << " DNS request timeout" << std::endl;
+            VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
             clientdata_and_cbs->notify_waiting_thread();
             delete clientdata_and_cbs;
             return;
         }
         VSOMEIP_DEBUG << __func__ << " TLSA CLIENT RESPONSE RECEIVE";
-        clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::TLSA_CLIENT_RESPONSE_RECEIVE_);
+        clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::TLSA_CLIENT_RESPONSE_RECEIVE_);
 
         unsigned char* copy = new unsigned char[_alen];
         memcpy(copy, _abuf, _alen);
         tlsa_reply* tlsareply;
         if ((parse_tlsa_reply(copy, _alen, &tlsareply)) != ARES_SUCCESS) {
-            std::cerr << "Parsing client TLSA reply failed" << std::endl;
+            VSOMEIP_DEBUG << "Parsing client TLSA reply failed" << std::endl;
+            clientdata_and_cbs->notify_waiting_thread();
             delete clientdata_and_cbs;
             delete[] copy;
             delete_tlsa_reply(tlsareply);
@@ -89,6 +91,7 @@ namespace vsomeip_v3 {
             clientdata_and_cbs->add_subscriber_certificate_callback_(clientdata_and_cbs->client_, clientdata_and_cbs->ipv4_address_, clientdata_and_cbs->service_, clientdata_and_cbs->instance_, clientdata_and_cbs->convert_der_to_pem_callback_(tlsa_reply_ptr->certificate_association_data_));
             tlsa_reply_ptr = tlsa_reply_ptr->tlsa_reply_next_;
         }
+        VSOMEIP_DEBUG << "Client TLSA Resolved Service: " << clientdata_and_cbs->service_ << " for Client: " << clientdata_and_cbs->client_;
         clientdata_and_cbs->notify_waiting_thread();
         delete clientdata_and_cbs;
         delete[] copy;
@@ -109,8 +112,9 @@ namespace vsomeip_v3 {
         request << ".";
         request << SERVICE_PARENTDOMAIN;
         VSOMEIP_DEBUG << __func__ << " TLSA SERVICE REQUEST SEND";
-        servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->its_unicast_.to_uint(), time_metric::TLSA_SERVICE_REQUEST_SEND_);
+        servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->service_,servicedata_and_cbs->its_unicast_.to_uint(), time_metric::TLSA_SERVICE_REQUEST_SEND_);
         dns_resolver_->resolve(request.str().c_str(), C_IN, T_TLSA, service_tlsa_resolve_callback, _service_data);
+        VSOMEIP_DEBUG << "Service TLSA Requested Service: " << servicedata_and_cbs->service_;
     }
 
     void tlsa_resolver::request_client_tlsa_record(void* _client_data) {
@@ -126,8 +130,9 @@ namespace vsomeip_v3 {
         request << "id0x" << std::hex << std::setw(4) << std::setfill('0') << (int) clientdata_and_cbs->client_;
         request << ".";
         request << CLIENT_PARENTDOMAIN;
-        VSOMEIP_DEBUG << __func__ << " TLSA CLIENT REQUEST SEND";
-        clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::TLSA_CLIENT_REQUEST_SEND_);
+        VSOMEIP_DEBUG << __func__ << " TLSA CLIENT REQUEST SEND " << request.str();
+        clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::TLSA_CLIENT_REQUEST_SEND_);
         dns_resolver_->resolve(request.str().c_str(), C_IN, T_TLSA, client_tlsa_resolve_callback, _client_data);
+        VSOMEIP_DEBUG << "Client TLSA Requested Service: " << clientdata_and_cbs->service_ << " for Client: " << clientdata_and_cbs->client_;
     }
 } /* end namespace vsomeip_v3 */

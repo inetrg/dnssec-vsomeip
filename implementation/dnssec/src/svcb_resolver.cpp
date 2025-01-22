@@ -33,13 +33,13 @@ namespace vsomeip_v3 {
             return;
         }
         VSOMEIP_DEBUG << __func__ << " SVCB SERVICE RESPONSE RECEIVE";
-        servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_RESPONSE_RECEIVE_);
+        servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->service_, servicedata_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_RESPONSE_RECEIVE_);
 
         unsigned char* copy = new unsigned char[_alen];
         memcpy(copy, _abuf, _alen);
         svcb_reply* svcbreply;
         if ((parse_svcb_reply(copy, _alen, &svcbreply)) != ARES_SUCCESS) {
-            std::cerr << "Parsing service SVCB reply failed" << std::endl;
+            VSOMEIP_DEBUG << "Parsing service SVCB reply failed" << std::endl;
             delete servicedata_and_cbs;
             delete[] copy;
             delete_svcb_reply(svcbreply);
@@ -56,6 +56,7 @@ namespace vsomeip_v3 {
             servicedata_and_cbs->major_ = (vsomeip_v3::major_version_t) std::stoi(svcb_reply_ptr->get_svcb_key(MAJOR_VERSION),0,16);
             servicedata_and_cbs->minor_ = (vsomeip_v3::minor_version_t) std::stoi(svcb_reply_ptr->get_svcb_key(MINOR_VERSION),0,16);
             servicedata_and_cbs->add_service_svcb_entry_cache_callback_(servicedata_and_cbs->service_, servicedata_and_cbs->instance_, servicedata_and_cbs->major_, servicedata_and_cbs->minor_, l4protocol, servicedata_and_cbs->ipv4_address_, svcb_reply_ptr->port_);
+            VSOMEIP_DEBUG << "SVCB Resolved Service: " << servicedata_and_cbs->service_;
 #ifdef NO_SOMEIP_SD
             // Addition for w/o SOME/IP SD Start #######################################################
             servicedata_and_cbs->mimic_offerservice_serviceentry_callback_(servicedata_and_cbs->service_, servicedata_and_cbs->instance_, servicedata_and_cbs->major_, servicedata_and_cbs->minor_, servicedata_and_cbs->ipv4_address_, svcb_reply_ptr->port_, (uint8_t) l4protocol);
@@ -79,19 +80,17 @@ namespace vsomeip_v3 {
         
         if (_status) {
             std::cerr << __func__ << " Bad DNS response" << std::endl;
-            clientdata_and_cbs->notify_waiting_thread();
             delete clientdata_and_cbs;
             return;
         }
 
         if (_timeouts) {
             std::cerr << __func__ << " DNS request timeout" << std::endl;
-            clientdata_and_cbs->notify_waiting_thread();
             delete clientdata_and_cbs;
             return;
         }
         VSOMEIP_DEBUG << __func__ << " SVCB CLIENT RESPONSE RECEIVE";
-        clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_RESPONSE_RECEIVE_);
+        clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_RESPONSE_RECEIVE_);
 
         unsigned char* copy = new unsigned char[_alen];
         memcpy(copy, _abuf, _alen);
@@ -145,8 +144,9 @@ namespace vsomeip_v3 {
         request << "id0x" << std::hex << std::setw(4) << std::setfill('0') << (int) _service_data_and_cbs->service_;
         request << ".";
         request << SERVICE_PARENTDOMAIN;
-        _service_data_and_cbs->record_timestamp_callback_(_service_data_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_REQUEST_SEND_);
+        _service_data_and_cbs->record_timestamp_callback_(_service_data_and_cbs->service_, _service_data_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_REQUEST_SEND_);
         VSOMEIP_DEBUG << __func__ << " SVCB SERVICE REQUEST SEND";
+        VSOMEIP_DEBUG << "SVCB Requested Service: " << _service_data_and_cbs->service_;
         dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, service_svcb_resolve_callback, _service_data_and_cbs);
     }
 
@@ -167,7 +167,7 @@ namespace vsomeip_v3 {
         request << ".";
         request << CLIENT_PARENTDOMAIN;
         VSOMEIP_DEBUG << __func__ << " SVCB CLIENT REQUEST SEND";
-        _client_data_and_cbs->record_timestamp_callback_(_client_data_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_REQUEST_SEND_);
+        _client_data_and_cbs->record_timestamp_callback_(_client_data_and_cbs->service_, _client_data_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_REQUEST_SEND_);
         dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, client_svcb_resolve_callback, _client_data_and_cbs);
     }
 } /* end namespace vsomeip_v3 */

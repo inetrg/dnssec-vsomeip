@@ -135,7 +135,6 @@ public:
     VSOMEIP_EXPORT std::set<std::pair<port_t, port_t> > get_routing_guest_ports(
             uid_t _uid, gid_t _gid) const;
 
-    VSOMEIP_EXPORT bool is_publisher_application(const std::string &_name) const;
     VSOMEIP_EXPORT client_t get_id(const std::string &_name) const;
     VSOMEIP_EXPORT bool is_configured_client_id(client_t _id) const;
 
@@ -147,6 +146,8 @@ public:
     VSOMEIP_EXPORT bool has_session_handling(const std::string &_name) const;
 
     VSOMEIP_EXPORT std::set<std::pair<service_t, instance_t> > get_remote_services() const;
+    VSOMEIP_EXPORT std::set<std::pair<service_t, instance_t> > get_local_services() const;
+    VSOMEIP_EXPORT std::set<std::pair<service_t, instance_t> > get_required_services() const;
 
     VSOMEIP_EXPORT bool get_multicast(service_t _service, instance_t _instance,
             eventgroup_t _eventgroup, std::string &_address, uint16_t &_port) const;
@@ -299,13 +300,13 @@ public:
     VSOMEIP_EXPORT bool is_remote_access_allowed() const;
 
     // Additional methods for service authentication
-    VSOMEIP_EXPORT const CryptoPP::RSA::PrivateKey& get_private_key() const;
-    VSOMEIP_EXPORT const std::vector<CryptoPP::byte>& get_certificate() const;
-    VSOMEIP_EXPORT const std::vector<CryptoPP::byte>& get_service_certificate() const;
-    VSOMEIP_EXPORT const std::map<std::string, std::vector<CryptoPP::byte>>& get_client_certificates() const;
+    VSOMEIP_EXPORT client_t get_client_id_for_service(service_t _service, instance_t _instance) const;
+    VSOMEIP_EXPORT const CryptoPP::RSA::PrivateKey& get_service_private_key(service_t _service, instance_t _instance) const;
+    VSOMEIP_EXPORT const CryptoPP::RSA::PrivateKey& get_client_private_key(service_t _service,instance_t _instance) const;
+    VSOMEIP_EXPORT const std::vector<CryptoPP::byte>& get_service_certificate_for_client(service_t _service, instance_t _instance) const;
+    VSOMEIP_EXPORT const std::map<client_t, std::vector<CryptoPP::byte>>& get_client_certificates(service_t _service, instance_t _instance) const;
     VSOMEIP_EXPORT uint32_t get_network_address() const;
     VSOMEIP_EXPORT uint32_t get_dns_server_ip() const;
-    VSOMEIP_EXPORT size_t get_subscriber_count_to_record() const;
 
 private:
     void read_data(const std::set<std::string> &_input,
@@ -481,10 +482,8 @@ private:
     void load_partition(const boost::property_tree::ptree &_tree);
 
     // Additional methods for service authentication
-    void load_asymmetric_keys(const configuration_element& _element);
     void compute_network_address();
     void load_dns_server_ip(const configuration_element& _element);
-    void load_subscriber_count_to_record(const configuration_element& _element);
 
 private:
     std::mutex mutex_;
@@ -665,13 +664,8 @@ protected:
 
     // Additional members for service authentication
     crypto_operator crypto_operator_;
-    std::vector<CryptoPP::byte> certificate_;
-    CryptoPP::RSA::PrivateKey private_key_;
-    std::vector<CryptoPP::byte> service_certificate_;
-    std::map<std::string, std::vector<CryptoPP::byte>> client_certificates_;
     uint32_t network_address_;
     uint32_t dns_server_ip_;
-    size_t subscriber_count_to_record_;
 
     bool log_statistics_;
     uint32_t statistics_interval_;

@@ -386,10 +386,8 @@ bool application_impl::init() {
         std::cerr << "Configuration module could not be loaded!" << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    if (!configuration_->is_publisher_application(name_)) {
-        statistics_recorder_->record_custom_timestamp(configuration_->get_unicast_address().to_v4().to_uint(), time_metric::SUBSCRIBER_APP_INITIALIZATION_START_, init_timestamp_start);
-        statistics_recorder_->record_timestamp(configuration_->get_unicast_address().to_v4().to_uint(), time_metric::SUBSCRIBER_APP_INITIALIZATION_END_);
-    }
+    statistics_recorder_->set_configuration(configuration_);
+    statistics_recorder_->initialize_statistics(init_timestamp_start);
     return is_initialized_;
 }
 

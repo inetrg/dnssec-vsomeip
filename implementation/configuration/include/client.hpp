@@ -11,6 +11,8 @@
 #include <set>
 
 #include <vsomeip/primitive_types.hpp>
+// Additional includes for service authentication
+#include "../../service_authentication/include/crypto_operator.hpp"
 
 namespace vsomeip_v3 {
 namespace cfg {
@@ -23,6 +25,7 @@ struct client {
     // ports for specific service / instance
     service_t service_;
     instance_t instance_;
+    client_t client_id_;
     std::map<bool, std::set<uint16_t> > ports_;
     std::map<bool, uint16_t> last_used_specific_client_port_;
 
@@ -30,6 +33,10 @@ struct client {
     std::map<bool, std::pair<uint16_t, uint16_t> > remote_ports_;
     std::map<bool, std::pair<uint16_t, uint16_t> > client_ports_;
     std::map<bool, uint16_t> last_used_client_port_;
+
+    // certificates
+    CryptoPP::RSA::PrivateKey private_key_;
+    std::vector<CryptoPP::byte> service_certificate_;
 };
 
 } // namespace cfg

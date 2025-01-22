@@ -543,14 +543,8 @@ private:
     std::shared_ptr<challenge_nonce_cache> challenge_nonce_cache_;
     std::shared_ptr<eventgroup_subscription_ack_cache> eventgroup_subscription_ack_cache_;
     crypto_operator crypto_operator_;
-    const std::vector<CryptoPP::byte>& certificate_;
-    const CryptoPP::RSA::PrivateKey& private_key_;
     #if defined(WITH_DNSSEC) && defined(WITH_DANE)
     std::shared_ptr<tlsa_resolver> tlsa_resolver_;
-    #endif
-    #ifndef WITH_DANE
-    const std::vector<CryptoPP::byte>& service_certificate_;
-    const std::map<std::string, std::vector<CryptoPP::byte>>& client_certificates_;
     #endif
 #endif
     // Additional members for statistics contribution Start #########################################################
