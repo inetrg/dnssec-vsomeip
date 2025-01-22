@@ -29,7 +29,7 @@ namespace vsomeip_v3 {
     typedef std::function<void(void*)> request_service_tlsa_record_callback;
     typedef std::function<void(boost::asio::ip::address_v4, service_t, instance_t, std::vector<unsigned char>)> add_publisher_certificate_callback;
     typedef std::function<void(boost::asio::ip::address_v4, service_t, instance_t, major_version_t)> validate_subscribe_ack_and_verify_signature_callback;
-    typedef std::function<void(uint32_t, time_metric)> record_timestamp_callback;
+    typedef std::function<void(service_t, uint32_t, time_metric)> record_timestamp_callback;
     struct service_data_and_cbs {
         service_t service_;
         instance_t instance_;

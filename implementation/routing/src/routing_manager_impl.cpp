@@ -657,9 +657,10 @@ void routing_manager_impl::request_service(client_t _client, service_t _service,
     servicedata_and_cbs->convert_der_to_pem_callback_ = std::bind(&crypto_operator::convert_der_to_pem, &crypto_operator_,
                                             std::placeholders::_1);
     #endif
-    servicedata_and_cbs->record_timestamp_callback_ = std::bind(&statistics_recorder::record_timestamp, statistics_recorder_,
+    servicedata_and_cbs->record_timestamp_callback_ = std::bind(&statistics_recorder::record_timestamp_for_service, statistics_recorder_,
                                             std::placeholders::_1,
-                                            std::placeholders::_2);
+                                            std::placeholders::_2,
+                                            std::placeholders::_3);
     servicedata_and_cbs->its_unicast_ = configuration_->get_unicast_address().to_v4();
     svcb_resolver_->request_service_svcb_record(servicedata_and_cbs);
     //Addition for Service Authentication End ############################################################################

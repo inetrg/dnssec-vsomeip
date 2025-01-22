@@ -20,7 +20,6 @@ namespace cfg {
 
 struct application_configuration {
     client_t client_;
-    bool is_publisher_;
     std::size_t max_dispatchers_;
     std::size_t max_dispatch_time_;
     std::size_t thread_count_;

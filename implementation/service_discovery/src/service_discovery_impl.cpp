@@ -1922,7 +1922,6 @@ service_discovery_impl::validate_offer(service_t _service, instance_t _instance,
 #ifndef NO_SOMEIP_SD
     VSOMEIP_DEBUG << __func__ << " VALIDATE OFFER START";
     service_svcb_cache_entry service_svcbcache_entry = svcb_cache_->get_service_svcb_cache_entry(_service, _instance, _major, _minor);
-    if(resume_processofferservice_entry.ttl_)
     bool offer_verified = false;
     uint64_t validation_start_time = static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());    
     offer_verified = (resume_processofferservice_entry.service_ == service_svcbcache_entry.service_)
