@@ -12,6 +12,13 @@
 std::mutex dns_resolver::mutex_;
 dns_resolver* dns_resolver::instance_;
 
+void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen) {
+    dns_request* query = reinterpret_cast<dns_request*>(_data);
+    query->callback_(query->arg_, _status, _timeouts, _abuf, _alen);
+    free(const_cast<char *>(query->name_));
+    delete query;
+}
+
 dns_resolver* dns_resolver::get_instance() {
     std::lock_guard<std::mutex> lockguard(mutex_);
     if(instance_ == nullptr) {
@@ -23,14 +30,15 @@ dns_resolver* dns_resolver::get_instance() {
 void dns_resolver::resolve(const char* _name, int _dnsclass, int _type, ares_callback _callback, void* _arg) {
     if (!initialized_)
         throw std::runtime_error("dns_resolver is not initialized, call initialize() first!");
-    dns_request _dns_request;
+    dns_request* _dns_request = new dns_request();
     char* url = (char*)malloc(strlen(_name)+1);
     strcpy(url, _name);
-    _dns_request.name_ = url;
-    _dns_request.dnsclass_ = _dnsclass;
-    _dns_request.type_ = _type;
-    _dns_request.callback_ = _callback;
-    _dns_request.arg_ = _arg;
+    _dns_request->name_ = url;
+    _dns_request->dnsclass_ = _dnsclass;
+    _dns_request->type_ = _type;
+    _dns_request->callback_ = _callback;
+    _dns_request->arg_ = _arg;
+    _dns_request->resolver_ = this;
     {
         std::lock_guard<std::mutex> lockGuard(mutex_);
         dns_requests_.push_back(_dns_request);
@@ -109,14 +117,14 @@ void dns_resolver::process() {
             std::cout << "Process thread received signal. Processing ..." << std::endl;
         */
         if (state_ != STOPPED) {
-            dns_request dns_request;
+            dns_request* dns_request;
             {
                 std::lock_guard<std::mutex> lockguard(mutex_);
                 dns_request = dns_requests_.front();
                 dns_requests_.pop_front();
             }
-            ares_search(channel_, dns_request.name_, dns_request.dnsclass_, dns_request.type_, dns_request.callback_,
-                        dns_request.arg_);
+            ares_search(channel_, dns_request->name_, dns_request->dnsclass_, dns_request->type_, cares_callback,
+                        dns_request);
             while (true) {
                 FD_ZERO(&readers);
                 FD_ZERO(&writers);
