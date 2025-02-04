@@ -23,11 +23,12 @@ namespace vsomeip_v3 {
             return;
         }
 
-        if (_timeouts) {
-            VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
-            delete servicedata_and_cbs;
-            return;
-        }
+        // if (_timeouts) {
+        //     VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
+        //     std::cout << "DNS request timeout" << std::endl;
+        //     delete servicedata_and_cbs;
+        //     return;
+        // }
         VSOMEIP_DEBUG << __func__ << " TLSA SERVICE RESPONSE RECEIVE";
         servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->service_, servicedata_and_cbs->its_unicast_.to_uint(), time_metric::TLSA_SERVICE_RESPONSE_RECEIVE_);
 

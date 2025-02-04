@@ -14,7 +14,55 @@ dns_resolver* dns_resolver::instance_;
 
 void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen) {
     dns_request* query = reinterpret_cast<dns_request*>(_data);
-    query->callback_(query->arg_, _status, _timeouts, _abuf, _alen);
+
+    switch (_status)
+    {
+    case ARES_SUCCESS:
+        std::cout << "Query for " << query->name_ << " succeeded" << std::endl;
+        break;
+    case ARES_ECONNREFUSED:
+        std::cout << "Query for " << query->name_ << " could not be completed because the connection was refused" << std::endl;
+        query->resolver_->conn_refused();
+        retry = true;
+        break;
+    case ARES_ENODATA:
+        std::cout << "Query for " << query->name_ << " returned no data" << std::endl;
+        break;
+    case ARES_EFORMERR:
+        std::cout << "Query for " << query->name_ << " could not be completed due to a format error" << std::endl;
+        break;
+    case ARES_ESERVFAIL:
+        std::cout << "Query for " << query->name_ << " could not be completed due to a server failure" << std::endl;
+        break;
+    case ARES_ENOTFOUND:
+        std::cout << "Query for " << query->name_ << " could not be completed because the name was not found" << std::endl;
+        break;
+    case ARES_ENOTIMP:
+        std::cout << "Query for " << query->name_ << " could not be completed because the query type is not implemented" << std::endl;
+        break;
+    case ARES_EREFUSED:
+        std::cout << "Query for " << query->name_ << " could not be completed because the server refused the query" << std::endl;
+        break;
+    case ARES_ETIMEOUT:
+        std::cout << "Query for " << query->name_ << " could not be completed because as it timed out" << std::endl;
+        break;
+    case ARES_ENOMEM:
+        std::cout << "Query for " << query->name_ << " could not be completed because of memory allocation failure" << std::endl;
+        break;
+    case ARES_EDESTRUCTION:
+        std::cout << "Query for " << query->name_ << " could not be completed because the channel was destroyed" << std::endl;
+        break;    
+    default:
+        std::cout << "Query for " << query->name_ << " could not be completed due to an unknown error" << std::endl;
+        break;
+    }
+
+    if (retry) {
+        query->resolver_->resolve(query->name_, query->dnsclass_, query->type_, query->callback_, query->arg_);
+    }
+    else {
+        query->callback_(query->arg_, _status, _timeouts, _abuf, _alen);
+    }
     free(const_cast<char *>(query->name_));
     delete query;
 }
@@ -46,6 +94,10 @@ void dns_resolver::resolve(const char* _name, int _dnsclass, int _type, ares_cal
     condition_variable_.notify_one();
 }
 
+void dns_resolver::conn_refused() {
+    conn_refuse_wait_us_ = std::chrono::microseconds(CONN_REFUSE_WAIT_US);
+}
+
 int dns_resolver::change_dns_server(ares_channel& _channel, in_addr_t _address) {
     ares_addr_node servers;
     servers.next = nullptr;
@@ -58,22 +110,23 @@ int dns_resolver::initialize(in_addr_t _address) {
     std::lock_guard<std::mutex> lock_guard(mutex_);
     if (!initialized_) {
         ares_library_init(ARES_LIB_INIT_ALL);
-        if (ares_init(&channel_) != ARES_SUCCESS) {
-            std::cout << "Channel initialization failed" << std::endl;
+        std::cout << "Ares library initialized" << std::endl;
+        if (!ares_threadsafety()) {
+            std::cout << "Ares is not thread safe" << std::endl;
             return 1;
         }
 
         ares_options options;
-        options.flags = 0;
+        memset(&options, 0, sizeof(options));
         int optmask = 0;
-        if (ares_save_options(channel_, &options, &optmask) != ARES_SUCCESS) {
-            std::cout << "Retrieving options failed" << std::endl;
-            return 1;
-        }
-        ares_destroy(channel_);
-        options.flags |= ARES_FLAG_EDNS;
-        optmask |= ARES_OPT_EDNSPSZ;
-        options.ednspsz = EDNSPKSZ;
+        optmask      |= ARES_OPT_EVENT_THREAD;
+        options.evsys = ARES_EVSYS_DEFAULT;
+        options.flags |= ARES_FLAG_USEVC;
+        options.flags |= ARES_FLAG_STAYOPEN;
+        // options.flags |= ARES_FLAG_EDNS;
+        optmask |= ARES_OPT_FLAGS;
+        // optmask |= ARES_OPT_EDNSPSZ;
+        // options.ednspsz = EDNSPKSZ;
         if (ares_init_options(&channel_, &options, optmask) != ARES_SUCCESS) {
             std::cout << "Initializing with options failed" << std::endl;
             return 1;
@@ -83,6 +136,8 @@ int dns_resolver::initialize(in_addr_t _address) {
             std::cout << "Setting servers failed" << std::endl;
             return 1;
         }
+        conn_refuse_wait_us_ = std::chrono::microseconds(0);
+        process_id_ = _process_id;
         state_ = STARTED;
         process_thread_ = std::thread(&dns_resolver::process, this);
         initialized_ = true;
@@ -100,43 +155,25 @@ void dns_resolver::process() {
     //bool waitBool;
     while (state_ != STOPPED) {
         LOG_DEBUG("Process thread performed unique lock")
-        /*
-        if (dns_requests_.empty()) {
-            std::cout << "Process thread waits for data" << std::endl;
-            waitBool = true;
-        } else {
-            waitBool = false;
-        }
-         */
         {
             std::unique_lock<std::mutex> unique_lock(mutex_);
             condition_variable_.wait(unique_lock, [this] { return !dns_requests_.empty() || state_ == STOPPED; });
         }
-        /*
-        if (waitBool)
-            std::cout << "Process thread received signal. Processing ..." << std::endl;
-        */
+        if (conn_refuse_wait_us_.count() > 0) {
+            std::this_thread::sleep_for(conn_refuse_wait_us_);
+            conn_refuse_wait_us_ = std::chrono::microseconds(0);
+        }
         if (state_ != STOPPED) {
             dns_request* dns_request;
             {
                 std::lock_guard<std::mutex> lockguard(mutex_);
                 dns_request = dns_requests_.front();
                 dns_requests_.pop_front();
+                // std::cout << process_id_ << " Request popped from queue, new size: " << dns_requests_.size() << std::endl;
             }
-            ares_search(channel_, dns_request->name_, dns_request->dnsclass_, dns_request->type_, cares_callback,
-                        dns_request);
-            while (true) {
-                FD_ZERO(&readers);
-                FD_ZERO(&writers);
-                nfds = ares_fds(channel_, &readers, &writers);
-                if (nfds == 0)
-                    break;
-                tvp = ares_timeout(channel_, NULL, &tv);
-                /* count = */ select(nfds, &readers, &writers, NULL, tvp);
-                ares_process(channel_, &readers, &writers);
-            }
-            free(const_cast<char *>(dns_request.name_));
-
+            lookups++;
+            ares_search(channel_, dns_request->name_, dns_request->dnsclass_, dns_request->type_, cares_callback, dns_request);
+            std::cout << process_id_ << " processed request " << lookups << std::endl;
         } else {
             LOG_DEBUG("Process thread is about to exit")
         }
@@ -148,6 +185,11 @@ dns_resolver::dns_resolver() {
 }
 
 dns_resolver::~dns_resolver() {
+    cleanup();
+    for (auto& dns_request : dns_requests_) {
+        free(const_cast<char *>(dns_request->name_));
+        delete dns_request;
+    }
 }
 
 void dns_resolver::cleanup() {

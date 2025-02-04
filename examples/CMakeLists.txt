@@ -51,7 +51,7 @@ file(GLOB DNS_SRC
 list(SORT DNS_SRC)
 
 add_executable(dns-sample dns-sample.cpp ${DNS_SRC} ${EXAMPLE_CONFIG_FILES})
-target_link_libraries(dns-sample ${VSOMEIP_NAME} ${VSOMEIP_LIBS} ${Boost_LIBRARIES} ${DL_LIBRARY} libcares.so libcryptopp.a crypto)
+target_link_libraries(dns-sample ${VSOMEIP_NAME} ${VSOMEIP_LIBS} ${Boost_LIBRARIES} ${DL_LIBRARY} libcares.a cares libcryptopp.a crypto)
 
 add_dependencies(examples request-sample response-sample subscribe-sample notify-sample my-publisher my-subscriber dns-sample)
 
