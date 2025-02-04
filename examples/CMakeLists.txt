@@ -15,6 +15,7 @@ set(EXAMPLE_CONFIG_FILES
 )
 
 find_package (vsomeip3 REQUIRED)
+cmake_policy(SET CMP0167 NEW)
 find_package(Boost COMPONENTS system thread log REQUIRED)
 
 include_directories (
@@ -43,10 +44,19 @@ target_link_libraries(my-publisher ${VSOMEIP_NAME} ${VSOMEIP_LIBS} ${Boost_LIBRA
 add_executable(my-subscriber my-subscriber.cpp ${EXAMPLE_CONFIG_FILES})
 target_link_libraries(my-subscriber ${VSOMEIP_NAME} ${VSOMEIP_LIBS} ${Boost_LIBRARIES} ${DL_LIBRARY})
 
-add_dependencies(examples request-sample response-sample subscribe-sample notify-sample my-publisher my-subscriber)
+file(GLOB DNS_SRC 
+    "../implementation/dnssec/src/*.cpp"
+    "../implementation/service_authentication/src/*.cpp"
+)
+list(SORT DNS_SRC)
+
+add_executable(dns-sample dns-sample.cpp ${DNS_SRC} ${EXAMPLE_CONFIG_FILES})
+target_link_libraries(dns-sample ${VSOMEIP_NAME} ${VSOMEIP_LIBS} ${Boost_LIBRARIES} ${DL_LIBRARY} libcares.so libcryptopp.a crypto)
+
+add_dependencies(examples request-sample response-sample subscribe-sample notify-sample my-publisher my-subscriber dns-sample)
 
 install (
-    TARGETS request-sample response-sample subscribe-sample notify-sample my-publisher my-subscriber
+    TARGETS request-sample response-sample subscribe-sample notify-sample my-publisher my-subscriber dns-sample
     RUNTIME DESTINATION "${INSTALL_BIN_DIR}" COMPONENT bin
 )
 
