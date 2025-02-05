@@ -24,6 +24,7 @@ public:
             app_(vsomeip::runtime::get()->create_application()),
             is_registered_(false),
             cycle_(_cycle),
+            wait_ms_(0),
             service_id_(SAMPLE_SERVICE_ID),
             instance_id_(SAMPLE_INSTANCE_ID),
             running_(true),
@@ -31,15 +32,40 @@ public:
             notify_thread_(std::bind(&my_publisher_app::notify, this)) {
     }
     
-    my_publisher_app(uint32_t _cycle, uint16_t _service_id, uint16_t _instance_id) :
+    my_publisher_app(uint32_t _cycle, uint16_t _service_id, uint16_t _instance_id, int _wait_ms) :
             app_(vsomeip::runtime::get()->create_application()),
             is_registered_(false),
             cycle_(_cycle),
+            wait_ms_(_wait_ms),
             service_id_(_service_id),
             instance_id_(_instance_id),
             running_(true),
             is_offered_(false),
             notify_thread_(std::bind(&my_publisher_app::notify, this)) {
+    }
+
+    void delayed_start() {
+        std::this_thread::sleep_for(std::chrono::milliseconds((int)(wait_ms_)));
+
+        // todo fix event group -- make parameters?
+        uint16_t event_group_id = 30000+service_id_;
+        uint16_t event_id = 10000+service_id_;
+
+        std::set<vsomeip::eventgroup_t> its_groups;
+        its_groups.insert(event_group_id);
+        app_->offer_event(
+                service_id_,
+                instance_id_,
+                event_id,
+                its_groups,
+                vsomeip::event_type_e::ET_FIELD, std::chrono::milliseconds::zero(),
+                false, true, nullptr, vsomeip::reliability_type_e::RT_UNKNOWN);
+        {
+            std::lock_guard<std::mutex> its_lock(payload_mutex_);
+            payload_ = vsomeip::runtime::get()->create_payload();
+        }
+
+        offer();
     }
 
     bool init() {
@@ -51,21 +77,7 @@ public:
                 std::bind(&my_publisher_app::on_state, this,
                         std::placeholders::_1));
 
-        std::set<vsomeip::eventgroup_t> its_groups;
-        its_groups.insert(SAMPLE_EVENTGROUP_ID);
-        app_->offer_event(
-                service_id_,
-                instance_id_,
-                SAMPLE_EVENT_ID,
-                its_groups,
-                vsomeip::event_type_e::ET_FIELD, std::chrono::milliseconds::zero(),
-                false, true, nullptr, vsomeip::reliability_type_e::RT_UNKNOWN);
-        {
-            std::lock_guard<std::mutex> its_lock(payload_mutex_);
-            payload_ = vsomeip::runtime::get()->create_payload();
-        }
-
-        offer();
+        start_delay_thread_ = std::thread(&my_publisher_app::delayed_start, this);
         return true;
     }
 
@@ -156,6 +168,8 @@ private:
     std::shared_ptr<vsomeip::application> app_;
     bool is_registered_;
     uint32_t cycle_;
+    int wait_ms_;
+    std::thread start_delay_thread_;
     uint16_t service_id_;
     uint16_t instance_id_;
     bool running_;
@@ -183,10 +197,12 @@ int main(int argc, char **argv) {
     uint32_t cycle = 10000; // default 1s
     uint16_t service_id = SAMPLE_SERVICE_ID;
     uint16_t instance_id = SAMPLE_INSTANCE_ID;
+    int wait_ms = 1000;
 
     std::string cycle_arg("--cycle");
     std::string service_arg("--serviceid");
     std::string instance_arg("--instanceid");
+    std::string wait_arg("--waitms");
 
     for (int i = 1; i < argc; i++) {
         if (cycle_arg == argv[i] && i + 1 < argc) {
@@ -207,9 +223,15 @@ int main(int argc, char **argv) {
             converter << argv[i];
             converter >> instance_id;
         }
+        else if (wait_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> wait_ms;
+        }
     }
 
-    my_publisher_app publisher_app(cycle, service_id, instance_id);
+    my_publisher_app publisher_app(cycle, service_id, instance_id, wait_ms);
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
     publisher_app_ptr = &publisher_app;
     signal(SIGINT, handle_signal);
