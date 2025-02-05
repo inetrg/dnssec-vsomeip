@@ -8,11 +8,12 @@
 #include <string.h>
 
 #define EDNSPKSZ 1280 // https://datatracker.ietf.org/doc/html/rfc6891
-
+#define CONN_REFUSE_WAIT_US 1000000
 std::mutex dns_resolver::mutex_;
 dns_resolver* dns_resolver::instance_;
 
 void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen) {
+    bool retry = false;
     dns_request* query = reinterpret_cast<dns_request*>(_data);
 
     switch (_status)
@@ -90,6 +91,7 @@ void dns_resolver::resolve(const char* _name, int _dnsclass, int _type, ares_cal
     {
         std::lock_guard<std::mutex> lockGuard(mutex_);
         dns_requests_.push_back(_dns_request);
+        std::cout << process_id_ << " Request added to queue, new size: " << dns_requests_.size() << std::endl;
     }
     condition_variable_.notify_one();
 }
@@ -106,7 +108,7 @@ int dns_resolver::change_dns_server(ares_channel& _channel, in_addr_t _address) 
     return ares_set_servers(_channel, &servers);
 }
 
-int dns_resolver::initialize(in_addr_t _address) {
+int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
     std::lock_guard<std::mutex> lock_guard(mutex_);
     if (!initialized_) {
         ares_library_init(ARES_LIB_INIT_ALL);
@@ -149,6 +151,7 @@ int dns_resolver::initialize(in_addr_t _address) {
 }
 
 void dns_resolver::process() {
+    static int lookups = 0;
     int nfds/*, count*/;
     fd_set readers, writers;
     struct timeval tv, *tvp;
@@ -169,7 +172,7 @@ void dns_resolver::process() {
                 std::lock_guard<std::mutex> lockguard(mutex_);
                 dns_request = dns_requests_.front();
                 dns_requests_.pop_front();
-                // std::cout << process_id_ << " Request popped from queue, new size: " << dns_requests_.size() << std::endl;
+                std::cout << process_id_ << " Request popped from queue, new size: " << dns_requests_.size() << std::endl;
             }
             lookups++;
             ares_search(channel_, dns_request->name_, dns_request->dnsclass_, dns_request->type_, cares_callback, dns_request);

@@ -6,8 +6,8 @@
 #include <cstring>
 
 namespace vsomeip_v3 {
-    tlsa_resolver::tlsa_resolver(in_addr_t _dns_server_ip) : dns_resolver_(dns_resolver::get_instance()) {
-        dns_resolver_->initialize(_dns_server_ip);
+    tlsa_resolver::tlsa_resolver(in_addr_t _dns_server_ip, std::string _process_id) : dns_resolver_(dns_resolver::get_instance()) {
+        dns_resolver_->initialize(_dns_server_ip, _process_id);
     }
 
     tlsa_resolver::~tlsa_resolver() {
@@ -19,6 +19,7 @@ namespace vsomeip_v3 {
         
         if (_status) {
             VSOMEIP_DEBUG << __func__ << " Bad DNS response" << std::endl;
+            std::cout << "Bad DNS response" << std::endl;
             delete servicedata_and_cbs;
             return;
         }
@@ -37,6 +38,7 @@ namespace vsomeip_v3 {
         tlsa_reply* tlsareply;
         if ((parse_tlsa_reply(copy, _alen, &tlsareply)) != ARES_SUCCESS) {
             VSOMEIP_DEBUG << "Parsing service TLSA reply failed" << std::endl;
+            std::cout << "Parsing service TLSA reply failed" << std::endl;
             delete servicedata_and_cbs;
             delete[] copy;
             delete_tlsa_reply(tlsareply);

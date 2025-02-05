@@ -15,21 +15,25 @@
 #include <condition_variable>
 #include <deque>
 
+class dns_resolver;
+
 struct dns_request {
     const char* name_ = "";
     int dnsclass_ = 0;
     int type_ = 0;
     ares_callback callback_ = nullptr;
     void* arg_ = nullptr;
+    dns_resolver* resolver_ = nullptr;
 };
 
 class dns_resolver {
 
 public:
     static dns_resolver* get_instance();
-    int initialize(in_addr_t _address=DEFAULT_SERVER);
+    int initialize(in_addr_t _address=DEFAULT_SERVER, std::string _process_id="");
     void cleanup();
     void resolve(const char* _name, int _dnsclass, int _type, ares_callback _callback, void* _arg);
+    void conn_refused();
 protected:
 private:
     dns_resolver();
@@ -45,7 +49,9 @@ private:
     static dns_resolver* instance_;
     void process();
     int change_dns_server(ares_channel& _channel, in_addr_t _address);
-    std::deque<dns_request> dns_requests_;
+    std::deque<dns_request*> dns_requests_;
+    std::string process_id_;
+    std::chrono::microseconds conn_refuse_wait_us_;
 };
 
 #endif //VSOMEIP_DNS_RESOLVER_HPP
