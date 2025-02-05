@@ -28,6 +28,7 @@
 #include "../../dnssec/include/tlsa_resolver.hpp"
     #endif
 #include "../../service_authentication/include/challenge_nonce_cache.hpp"
+#include "../../service_authentication/include/eventgroup_subscription_cache.hpp"
 #include "../../service_authentication/include/eventgroup_subscription_ack_cache.hpp"
 #endif
 
@@ -103,6 +104,7 @@ public:
     virtual void set_dns_resolver(dns_resolver* _dns_resolver) = 0;
     virtual void set_svcb_resolver(std::shared_ptr<svcb_resolver> _svcb_resolver) = 0;
     virtual void set_svcb_cache(svcb_cache* _svcb_cache) = 0;
+    virtual void request_svcb(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor) = 0;
     virtual void set_resume_process_offerservice_cache(resume_process_offerservice_cache* _resume_process_offerservice_cache) = 0;
     virtual void validate_offer(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor) = 0;
 #endif
@@ -112,9 +114,17 @@ public:
     #endif
     virtual void set_challenge_nonce_cache(std::shared_ptr<challenge_nonce_cache> _challenge_nonce_cache) = 0;
     virtual void set_eventgroup_subscription_ack_cache(std::shared_ptr<eventgroup_subscription_ack_cache> _eventgroup_subscription_ack_cache) = 0;
+    virtual void set_eventgroup_subscription_cache(std::shared_ptr<eventgroup_subscription_cache> _eventgroup_subscription_cache) = 0;
     virtual void validate_subscribe_ack_and_verify_signature(boost::asio::ip::address_v4 _sender_ip_address, service_t _service, instance_t _instance, major_version_t _major) = 0;
 #endif
     // Addition for Service Authentication End ###########################################################################
+#if defined(WITH_CLIENT_AUTHENTICATION) && defined(WITH_SERVICE_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
+    // Additional Method for Service Authenticity Start ######################################################################
+    virtual void validate_subscribe_and_verify_signature(
+        client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address,
+        service_t _service, instance_t _instance, major_version_t _major) = 0;
+    // Additional Method for Service Authenticity End ########################################################################
+#endif
     // Addition for statistics recorder Start ###############################################################################
     virtual void set_statistics_recorder(std::shared_ptr<statistics_recorder> _statistics_recorder) = 0;
     // Addition for statistics recorder End #################################################################################

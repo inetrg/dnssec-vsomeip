@@ -94,6 +94,7 @@ routing_manager_impl::routing_manager_impl(routing_manager_host *_host) :
 #endif
 #ifdef WITH_SERVICE_AUTHENTICATION
         ,challenge_nonce_cache_(std::make_shared<challenge_nonce_cache>()),
+        eventgroup_subscription_cache_(std::make_shared<eventgroup_subscription_cache>()),
         eventgroup_subscription_ack_cache_(std::make_shared<eventgroup_subscription_ack_cache>())
     #if defined(WITH_DNSSEC) && defined(WITH_DANE)
         ,tlsa_resolver_(std::make_shared<tlsa_resolver>(configuration_->get_dns_server_ip()))
@@ -199,6 +200,7 @@ void routing_manager_impl::init() {
 #endif
 #ifdef WITH_SERVICE_AUTHENTICATION
             discovery_->set_challenge_nonce_cache(challenge_nonce_cache_);
+            discovery_->set_eventgroup_subscription_cache(eventgroup_subscription_cache_);
             discovery_->set_eventgroup_subscription_ack_cache(eventgroup_subscription_ack_cache_);
     #if defined(WITH_DNSSEC) && defined(WITH_DANE)
             discovery_->set_tlsa_resolver(tlsa_resolver_);
@@ -611,58 +613,7 @@ void routing_manager_impl::request_service(client_t _client, service_t _service,
         instance_t _instance, major_version_t _major, minor_version_t _minor) {
 #ifdef WITH_DNSSEC
     //Addition for Service Authentication Start ##########################################################################
-    service_data_and_cbs* servicedata_and_cbs = new service_data_and_cbs();
-    servicedata_and_cbs->service_ = _service;
-    servicedata_and_cbs->instance_ = _instance;
-    servicedata_and_cbs->major_ = _major;
-    servicedata_and_cbs->minor_ = _minor;
-    servicedata_and_cbs->add_service_svcb_entry_cache_callback_ = std::bind(&svcb_cache::add_service_svcb_cache_entry, svcb_cache_,
-                                            std::placeholders::_1,
-                                            std::placeholders::_2,
-                                            std::placeholders::_3,
-                                            std::placeholders::_4,
-                                            std::placeholders::_5,
-                                            std::placeholders::_6,
-                                            std::placeholders::_7);
-    #ifdef NO_SOMEIP_SD
-    // Addition for w/o SOME/IP SD Start #######################################################
-    servicedata_and_cbs->mimic_offerservice_serviceentry_callback_ = std::bind(&sd::service_discovery::mimic_offerservice_serviceentry, discovery_,
-                                            std::placeholders::_1,
-                                            std::placeholders::_2,
-                                            std::placeholders::_3,
-                                            std::placeholders::_4,
-                                            std::placeholders::_5,
-                                            std::placeholders::_6,
-                                            std::placeholders::_7);
-    // Addition for w/o SOME/IP SD End #########################################################
-    #endif
-    servicedata_and_cbs->validate_offer_callback_ = std::bind(&sd::service_discovery::validate_offer, discovery_,
-                                            std::placeholders::_1,
-                                            std::placeholders::_2,
-                                            std::placeholders::_3,
-                                            std::placeholders::_4);
-    #if defined(WITH_SERVICE_AUTHENTICATION) && defined(WITH_DANE)
-    servicedata_and_cbs->add_publisher_certificate_callback_ = std::bind(&challenge_nonce_cache::add_publisher_certificate, challenge_nonce_cache_,
-                                            std::placeholders::_1,
-                                            std::placeholders::_2,
-                                            std::placeholders::_3,
-                                            std::placeholders::_4);
-    servicedata_and_cbs->request_service_tlsa_record_callback_ = std::bind(&tlsa_resolver::request_service_tlsa_record, tlsa_resolver_,
-                                            std::placeholders::_1);
-    servicedata_and_cbs->validate_subscribe_ack_and_verify_signature_callback_ = std::bind(&sd::service_discovery::validate_subscribe_ack_and_verify_signature, discovery_,
-                                            std::placeholders::_1,
-                                            std::placeholders::_2,
-                                            std::placeholders::_3,
-                                            std::placeholders::_4);
-    servicedata_and_cbs->convert_der_to_pem_callback_ = std::bind(&crypto_operator::convert_der_to_pem, &crypto_operator_,
-                                            std::placeholders::_1);
-    #endif
-    servicedata_and_cbs->record_timestamp_callback_ = std::bind(&statistics_recorder::record_timestamp_for_service, statistics_recorder_,
-                                            std::placeholders::_1,
-                                            std::placeholders::_2,
-                                            std::placeholders::_3);
-    servicedata_and_cbs->its_unicast_ = configuration_->get_unicast_address().to_v4();
-    svcb_resolver_->request_service_svcb_record(servicedata_and_cbs);
+    discovery_->request_svcb(_service, _instance, _major, _minor);
     //Addition for Service Authentication End ############################################################################
 #endif
 

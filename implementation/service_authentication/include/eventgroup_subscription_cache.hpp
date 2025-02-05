@@ -5,7 +5,7 @@
 #include <vsomeip/primitive_types.hpp>
 #include "../../routing/include/eventgroupinfo.hpp"
 #include "../../service_discovery/include/remote_subscription_ack.hpp"
-#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/address.hpp>
 #include <vector>
 #include <set>
 #include <map>
@@ -22,10 +22,10 @@ namespace vsomeip_v3 {
             ttl_t ttl_ = -1;
             uint8_t counter_ = -1;
             uint16_t reserved_ = -1;
-            boost::asio::ip::address_v4 first_address_ = boost::asio::ip::address_v4::from_string("0.0.0.0");
+            boost::asio::ip::address first_address_;
             uint16_t first_port_ = -1;
             bool is_first_reliable_ = false;
-            boost::asio::ip::address_v4 second_address_ = boost::asio::ip::address_v4::from_string("0.0.0.0");
+            boost::asio::ip::address second_address_;
             uint16_t second_port_ = -1;
             bool is_second_reliable_ = false;
             std::shared_ptr<sd::remote_subscription_ack> acknowledgement_;
@@ -55,8 +55,8 @@ namespace vsomeip_v3 {
         eventgroup_subscription_cache& operator=(eventgroup_subscription_cache &) = delete;
         eventgroup_subscription_cache& operator=(eventgroup_subscription_cache &&) = delete;
 
-        void add_eventgroup_subscription_cache_entry(client_t _client, service_t _service, instance_t _instance, eventgroup_t _eventgroup, major_version_t _major, ttl_t _ttl, uint8_t _counter, uint16_t _reserved, const boost::asio::ip::address_v4 _first_address, uint16_t _first_port, bool _is_first_reliable,
-                                const boost::asio::ip::address_v4 _second_address, uint16_t _second_port, bool _is_second_reliable, std::shared_ptr<sd::remote_subscription_ack> _acknowledgement, bool _is_stop_subscribe_subscribe, bool _force_initial_events, std::set<client_t> _clients,
+        void add_eventgroup_subscription_cache_entry(client_t _client, service_t _service, instance_t _instance, eventgroup_t _eventgroup, major_version_t _major, ttl_t _ttl, uint8_t _counter, uint16_t _reserved, const boost::asio::ip::address _first_address, uint16_t _first_port, bool _is_first_reliable,
+                                const boost::asio::ip::address _second_address, uint16_t _second_port, bool _is_second_reliable, std::shared_ptr<sd::remote_subscription_ack> _acknowledgement, bool _is_stop_subscribe_subscribe, bool _force_initial_events, std::set<client_t> _clients,
                                 std::set<std::pair<bool, std::uint16_t>> _expired_ports, bool _sd_acceptance_required, bool _accept_entries, std::shared_ptr<eventgroupinfo> _info, std::vector<unsigned char> _nonce, std::vector<unsigned char> _blinded_secret, std::vector<byte_t> _signature);
         void remove_eventgroup_subscription_cache_entry(client_t _client, service_t _service, instance_t _instance, major_version_t _major);
         eventgroup_subscription_cache_entry get_eventgroup_subscription_cache_entry(client_t client, service_t _service, instance_t _instance, major_version_t _major);

@@ -52,6 +52,10 @@ statistics_recorder::~statistics_recorder() {
 
 void statistics_recorder::record_custom_timestamp_for_service(service_id_t _service_id, uint32_t _host_ip, time_metric _time_metric, uint64_t _timestamp) {
     // check if stats for service are complete and mark them
+    bool entries_complete = false;
+    if (already_contributed_) {
+        return;
+    }
     std::lock_guard<std::mutex> lock_guard(mutex_);
     if (!time_statistics_.count(_service_id)) {
         time_statistics_[_service_id] = host_time_stats_t();
@@ -62,6 +66,24 @@ void statistics_recorder::record_custom_timestamp_for_service(service_id_t _serv
     if (!time_statistics_[_service_id][_host_ip].count(_time_metric)) {
         // only record the timestamp if it is not already recorded
         time_statistics_[_service_id][_host_ip][_time_metric] = _timestamp;
+#ifdef WITH_SERVICE_AUTHENTICATION
+        entries_complete = (_time_metric == time_metric::SUBSCRIBE_ACK_SEND_) || (_time_metric == time_metric::VERIFY_SERVICE_SIGNATURE_END_);
+#else
+        entries_complete = (_time_metric == time_metric::SUBSCRIBE_ACK_SEND_) || (_time_metric == time_metric::SUBSCRIBE_ACK_RECEIVE_);
+#endif
+        if (entries_complete) {
+            VSOMEIP_DEBUG << __func__ << " Entries completed for service " << _service_id << " host " << _host_ip;
+            if (entries_complete_.count(_service_id) == 0) {
+                entries_complete_[_service_id] = std::set<host_key_t>();
+            }
+            entries_complete_[_service_id].insert(_host_ip);
+            if (check_services_complete()) {
+                VSOMEIP_DEBUG << __func__ << " All services completed ... contributing ";
+                // all services are complete
+                // contribute statistics
+                contribute_statistics();
+            }
+        }
     }
 }
 
@@ -71,6 +93,9 @@ void statistics_recorder::record_timestamp_for_service(service_id_t _service_id,
 }
 
 void statistics_recorder::contribute_statistics() {
+    if (already_contributed_) {
+        return;
+    }
     bool waited_for_shm = false;
     for (bool shared_objects_initialized = false; !shared_objects_initialized;) {
         try {
@@ -116,8 +141,31 @@ void statistics_recorder::contribute_statistics() {
             condition.notify_one();
         } catch (boost::interprocess::interprocess_exception& interprocess_exception) {
             std::cerr << __func__ << interprocess_exception.what() << std::endl;
+            VSOMEIP_ERROR << __func__ << interprocess_exception.what();
             std::cout << "[<statistics_recorder>] (" << __func__ << ") shared objects may not created yet or segment size is not enough. Examine error message for exact cause." << std::endl;
+            VSOMEIP_ERROR << "[<statistics_recorder>] (" << __func__ << ") shared objects may not created yet or segment size is not enough. Examine error message for exact cause.";
             sleep(1);
         }
     }
+    already_contributed_ = true;
+}
+
+bool statistics_recorder::check_services_complete() {
+    if (already_contributed_) {
+        return true;
+    }
+    bool complete = true;
+    for (auto service_entry : required_hosts_) {
+        if (entries_complete_.count(service_entry.first) == 0) {
+            VSOMEIP_DEBUG << __func__ << " Service " << service_entry.first << " has no entries";
+            complete = false;
+            break;
+        }
+        if (entries_complete_[service_entry.first].size() != service_entry.second) {
+            VSOMEIP_DEBUG << __func__ << " Service " << service_entry.first << " has not all entries: " << entries_complete_[service_entry.first].size() << " != required " << service_entry.second;
+            complete = false;
+            break;
+        }
+    }
+    return complete;
 }

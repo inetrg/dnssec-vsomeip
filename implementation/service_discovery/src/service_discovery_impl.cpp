@@ -1195,23 +1195,9 @@ service_discovery_impl::insert_subscription_ack(
     its_data.other_ = nullptr;
 
     // Addition for statistics contribution Start #################################################################
-    static std::set<uint32_t> recorded_subscribers;
-    static bool already_contributed = false;
-    static std::mutex contribution_mutex;
-    {
-        std::lock_guard<std::mutex> contribution_guard(contribution_mutex);
-        if(_ttl) {
-            VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK SEND";            
-            statistics_recorder_->record_timestamp_for_service(its_service, subscriber_address.to_uint(), time_metric::SUBSCRIBE_ACK_SEND_);
-            recorded_subscribers.insert(subscriber_address.to_uint());
-        }
-
-        if(!already_contributed && (recorded_subscribers.size() == configuration_->get_client_certificates(its_service, its_instance).size())) {
-            VSOMEIP_DEBUG << __func__ << " CONTRIBUTING STATISTICS";
-            statistics_contributor_ = std::thread(&statistics_recorder::contribute_statistics, statistics_recorder_);
-            already_contributed = true;
-            VSOMEIP_DEBUG << __func__ << " STATISTICS CONTRIBUTED";
-        }
+    if(_ttl) {
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK SEND";
+        statistics_recorder_->record_timestamp_for_service(its_service, subscriber_address.to_uint(), time_metric::SUBSCRIBE_ACK_SEND_);
     }
     // Addition for statistics contribution End ###################################################################
 
@@ -1503,21 +1489,21 @@ service_discovery_impl::process_serviceentry(
 
     // Addition for statistics recording Start ###################################################################
     
-    // bool is_requested = false;
-    // {
-    //     std::lock_guard<std::mutex> its_lock(requested_mutex_);
-    //     is_requested = requested_.count(its_service) > 0;
-    // }
-    auto required_services = configuration_->get_required_services();
-    for (auto& service : required_services) {
-        if (service.first == its_service && service.second == its_instance) {
-    // if (is_requested) { // only log offer time-stamps for requested services
-            if(its_type == entry_type_e::OFFER_SERVICE && its_ttl > 0) {
-                statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::OFFER_RECEIVE_);
-                VSOMEIP_DEBUG << __func__ << " OFFER RECEIVE";
-            }
+    bool is_requested = false;
+    {
+        std::lock_guard<std::mutex> its_lock(requested_mutex_);
+        is_requested = requested_.count(its_service) > 0;
+    }
+    // auto required_services = configuration_->get_required_services();
+    // for (auto& service : required_services) {
+    // if (service.first == its_service && service.second == its_instance) {
+    if (is_requested) { // only log offer time-stamps for requested services
+        if(its_type == entry_type_e::OFFER_SERVICE && its_ttl > 0) {
+            statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::OFFER_RECEIVE_);
+            VSOMEIP_DEBUG << __func__ << " OFFER RECEIVE";
         }
     }
+    // }
     // Addition for statistics recording End #####################################################################
 
     // Read address info from options
@@ -1659,6 +1645,80 @@ service_discovery_impl::set_svcb_cache(svcb_cache* _svcb_cache) {
     this->svcb_cache_ = _svcb_cache;
 }
 
+void 
+service_discovery_impl::request_svcb(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor) {
+    if (svcb_cache_->get_service_svcb_cache_entry(_service, _instance, _major, _minor).service_ == _service) {
+        VSOMEIP_DEBUG << __func__ << ": Already known ["
+                << std::hex << std::setfill('0')
+                << std::setw(4) << _service << "." << std::setw(4) << _instance
+                << "]";
+        return;
+    }
+    // if (svcb_cache_->is_requested_service_svcb_cache_entry(_service)) {
+    //     VSOMEIP_DEBUG << __func__ << ": Already requested SVCB for ["
+    //             << std::hex << std::setfill('0')
+    //             << std::setw(4) << _service << "." << std::setw(4) << _instance
+    //             << "]";
+    //     return;    
+    // }
+    if (svcb_resolver_) {
+        service_data_and_cbs* servicedata_and_cbs = new service_data_and_cbs();
+        servicedata_and_cbs->service_ = _service;
+        servicedata_and_cbs->instance_ = _instance;
+        servicedata_and_cbs->major_ = _major;
+        servicedata_and_cbs->minor_ = _minor;
+        servicedata_and_cbs->add_service_svcb_entry_cache_callback_ = std::bind(&svcb_cache::add_service_svcb_cache_entry, svcb_cache_,
+                                                std::placeholders::_1,
+                                                std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4,
+                                                std::placeholders::_5,
+                                                std::placeholders::_6,
+                                                std::placeholders::_7);
+#ifdef NO_SOMEIP_SD
+        // Addition for w/o SOME/IP SD Start #######################################################
+        servicedata_and_cbs->mimic_offerservice_serviceentry_callback_ = std::bind(&sd::service_discovery::mimic_offerservice_serviceentry, discovery_,
+                                                std::placeholders::_1,
+                                                std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4,
+                                                std::placeholders::_5,
+                                                std::placeholders::_6,
+                                                std::placeholders::_7);
+        // Addition for w/o SOME/IP SD End #########################################################
+#endif
+        servicedata_and_cbs->validate_offer_callback_ = std::bind(&sd::service_discovery::validate_offer, this,
+                                                std::placeholders::_1,
+                                                std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4);
+#if defined(WITH_SERVICE_AUTHENTICATION) && defined(WITH_DANE)
+        servicedata_and_cbs->add_publisher_certificate_callback_ = std::bind(&challenge_nonce_cache::add_publisher_certificate, challenge_nonce_cache_,
+                                                std::placeholders::_1,
+                                                std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4);
+        servicedata_and_cbs->request_service_tlsa_record_callback_ = std::bind(&tlsa_resolver::request_service_tlsa_record, tlsa_resolver_,
+                                                std::placeholders::_1);
+        servicedata_and_cbs->validate_subscribe_ack_and_verify_signature_callback_ = std::bind(&sd::service_discovery::validate_subscribe_ack_and_verify_signature, this,
+                                                std::placeholders::_1,
+                                                std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4);
+        servicedata_and_cbs->convert_der_to_pem_callback_ = std::bind(&crypto_operator::convert_der_to_pem, &crypto_operator_,
+                                                std::placeholders::_1);
+#endif
+        servicedata_and_cbs->record_timestamp_callback_ = std::bind(&statistics_recorder::record_timestamp_for_service, statistics_recorder_,
+                                                std::placeholders::_1,
+                                                std::placeholders::_2,
+                                                std::placeholders::_3);
+        servicedata_and_cbs->its_unicast_ = configuration_->get_unicast_address().to_v4();
+        svcb_resolver_->request_service_svcb_record(servicedata_and_cbs);
+        svcb_cache_->add_requested_service_svcb_cache_entry(_service, _instance, _major, _minor);
+        VSOMEIP_DEBUG << __func__ << " REQUEST SVCB, placeholder added for service=" << _service << ", instance=" << _instance << ", major=" << std::atoi(reinterpret_cast<char*>(&_major)) << ", minor=" << _minor;
+    }
+}
+
 void
 service_discovery_impl::set_resume_process_offerservice_cache(resume_process_offerservice_cache* _resume_process_offerservice_cache) {
     this->resume_process_offerservice_cache_ = _resume_process_offerservice_cache;
@@ -1676,6 +1736,11 @@ service_discovery_impl::set_tlsa_resolver(std::shared_ptr<tlsa_resolver> _tlsa_r
 void
 service_discovery_impl::set_challenge_nonce_cache(std::shared_ptr<challenge_nonce_cache> _challenge_nonce_cache) {
     this->challenge_nonce_cache_ = _challenge_nonce_cache;
+}
+
+void 
+service_discovery_impl::set_eventgroup_subscription_cache(std::shared_ptr<eventgroup_subscription_cache> _eventgroup_subscription_cache) {
+    this->eventgroup_subscription_cache_ = _eventgroup_subscription_cache;
 }
 
 void
@@ -1904,14 +1969,20 @@ service_discovery_impl::process_offerservice_serviceentry(
     // Service Authentication Start ##########################################################################
     resume_process_offerservice_cache_->add_offerservice_entry(_service, _instance, _major, _minor, _ttl, boost::asio::ip::address_v4::from_string(_reliable_address.to_string()), _reliable_port, boost::asio::ip::address_v4::from_string(_unreliable_address.to_string()), _unreliable_port, _resubscribes, _received_via_mcast);
 #ifndef NO_SOMEIP_SD
-    // bool is_requested = false;
-    // {
-    //     std::lock_guard<std::mutex> its_lock(requested_mutex_);
-    //     is_requested = requested_.count(_service) > 0;
-    // }
-    // if (is_requested) {
+    bool is_requested = false;
+    {
+        std::lock_guard<std::mutex> its_lock(requested_mutex_);
+        is_requested = requested_.count(_service) > 0;
+    }
+    if (is_requested) {
         validate_offer(_service, _instance, _major, _minor);
-    // } 
+    } else {
+        auto required_services = configuration_->get_required_services();
+            if (required_services.count(std::make_pair(_service, _instance)) > 0) {
+                VSOMEIP_DEBUG << __func__ << ": Offer for required but not yet requested service ["
+                    << _service << "." << _instance << "]";
+        }
+    }
 #endif
     // Service Authentication End ############################################################################
 }
@@ -1922,6 +1993,23 @@ service_discovery_impl::validate_offer(service_t _service, instance_t _instance,
 #ifndef NO_SOMEIP_SD
     VSOMEIP_DEBUG << __func__ << " VALIDATE OFFER START";
     service_svcb_cache_entry service_svcbcache_entry = svcb_cache_->get_service_svcb_cache_entry(_service, _instance, _major, _minor);
+    bool early_return = false;
+    if (service_svcbcache_entry.service_ == service_t(-1)) {
+        request_svcb(_service, _instance, _major, _minor);
+        VSOMEIP_DEBUG << __func__ << ": Offer verification not possible, requesting SVCB record for ["
+                << _service << "." << _instance
+                << "]";
+        early_return = true;
+    }
+    if (resume_processofferservice_entry.service_ == service_t(-1)) {
+        VSOMEIP_DEBUG << __func__ << ": No previous offer to validate for ["
+                << _service << "." << _instance
+                << "]";
+        early_return = true;
+    }
+    if (early_return) {
+        return;
+    }
     bool offer_verified = false;
     uint64_t validation_start_time = static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());    
     offer_verified = (resume_processofferservice_entry.service_ == service_svcbcache_entry.service_)
@@ -1934,6 +2022,10 @@ service_discovery_impl::validate_offer(service_t _service, instance_t _instance,
                 && (resume_processofferservice_entry.reliable_port_ == service_svcbcache_entry.port_))
            );
     if (!offer_verified) {
+        VSOMEIP_DEBUG << __func__ << ": Offer verification failed for ["
+                << std::hex << std::setfill('0')
+                << std::setw(4) << _service << "." << std::setw(4) << _instance
+                << "]";
         return;
     }
     if(resume_processofferservice_entry.ttl_) {
@@ -1943,7 +2035,7 @@ service_discovery_impl::validate_offer(service_t _service, instance_t _instance,
     VSOMEIP_DEBUG << __func__ << " VALIDATE OFFER END " << " service=" << _service;
 #endif
     resume_process_offerservice_serviceentry(resume_processofferservice_entry.service_, resume_processofferservice_entry.instance_, resume_processofferservice_entry.major_, resume_processofferservice_entry.minor_, resume_processofferservice_entry.ttl_, resume_processofferservice_entry.reliable_address_, resume_processofferservice_entry.reliable_port_, resume_processofferservice_entry.unreliable_address_, resume_processofferservice_entry.unreliable_port_, resume_processofferservice_entry.resubscribes_, resume_processofferservice_entry.received_via_mcast_);
-    resume_process_offerservice_cache_->remove_offerservice_entry(_service, _instance, _major, _minor);
+    // resume_process_offerservice_cache_->remove_offerservice_entry(_service, _instance, _major, _minor);
 }
 
 void
@@ -2480,21 +2572,8 @@ service_discovery_impl::process_eventgroupentry(
 #else
     // Addition for statistics contribution Start #################################################################
     if (entry_type_e::SUBSCRIBE_EVENTGROUP_ACK == its_type && its_ttl > 0) {
-        VSOMEIP_DEBUG << __func__ << " ABOUT TO CONTRIBUTE STATISTICS";
-        static bool already_contributed = false;
-        static std::mutex contribution_mutex;
-        {
-            std::lock_guard<std::mutex> contribution_guard(contribution_mutex);
-            VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE";
-            statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
-
-            if(!already_contributed) {
-                VSOMEIP_DEBUG << __func__ << " CONTRIBUTING STATISTICS";
-                statistics_recorder_->contribute_statistics();
-                already_contributed = true;
-            }
-        }
-        VSOMEIP_DEBUG << __func__ << " STATISTICS CONTRIBUTED";
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE";
+        statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
     }
     // Addition for statistics contribution End ###################################################################
 #endif
@@ -2933,11 +3012,8 @@ service_discovery_impl::process_eventgroupentry(
 #if defined(WITH_CLIENT_AUTHENTICATION) && defined(WITH_SERVICE_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
         if (its_ttl > 0) {
             // Service Authentication Start ##########################################################################
-            validate_subscribe_and_verify_signature(
-                client, _sender.to_v4(), its_service, its_instance, its_eventgroup, its_major, its_ttl, 0, 0, its_first_address,
-                its_first_port, is_first_reliable, its_second_address, its_second_port, is_second_reliable, _acknowledgement,
-                _is_stop_subscribe_subscribe, _force_initial_events, its_clients, _sd_ac_state, its_info,  signed_nonce,
-                blinded_secret, signature);
+            eventgroup_subscription_cache_->add_eventgroup_subscription_cache_entry(client, its_service, its_instance, its_eventgroup, its_major, its_ttl, 0, 0, its_first_address, its_first_port, is_first_reliable, its_second_address, its_second_port, is_second_reliable, _acknowledgement, _is_stop_subscribe_subscribe, _force_initial_events, its_clients, _sd_ac_state.expired_ports_, _sd_ac_state.sd_acceptance_required_, _sd_ac_state.accept_entries_, its_info, signed_nonce, blinded_secret, signature);
+            validate_subscribe_and_verify_signature(client, _sender.to_v4(), its_service, its_instance, its_major);
         } else {
             handle_eventgroup_subscription(its_service, its_instance,
                 its_eventgroup, its_major, its_ttl, 0, 0,
@@ -3049,14 +3125,7 @@ service_discovery_impl::process_authentication_for_received_subscribe_ack(
 #if defined(WITH_CLIENT_AUTHENTICATION) && defined(WITH_SERVICE_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
 void
 service_discovery_impl::validate_subscribe_and_verify_signature(
-        client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address, service_t _service, instance_t _instance,
-        eventgroup_t _eventgroup, major_version_t _major, ttl_t _ttl, uint8_t _counter, uint16_t _reserved, 
-        const boost::asio::ip::address &_first_address, uint16_t _first_port, bool _is_first_reliable,
-        const boost::asio::ip::address &_second_address, uint16_t _second_port, bool _is_second_reliable,
-        std::shared_ptr<remote_subscription_ack> &_acknowledgement, bool _is_stop_subscribe_subscribe,
-        bool _force_initial_events, const std::set<client_t> &_clients, const sd_acceptance_state_t& _sd_ac_state,
-        const std::shared_ptr<eventgroupinfo>& _info,  const std::vector<unsigned char>& _signed_nonce,
-        const std::vector<unsigned char>& _blinded_secret, const std::vector<unsigned char>& _signature) {
+        client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address, service_t _service, instance_t _instance, major_version_t _major) {
     VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE START";
     uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
     bool requirements_are_fulfilled = false;
@@ -3066,11 +3135,14 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
 #endif
     std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance);
     std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_publisher_challenge_nonce(_client, _subscriber_ip_address, _service, _instance);
+    eventgroup_subscription_cache_entry eventgroup_subscriptioncache_entry = eventgroup_subscription_cache_->get_eventgroup_subscription_cache_entry(_client, _service, _instance, _major);
+    std::vector<unsigned char> _signature = eventgroup_subscriptioncache_entry.signature_;
     requirements_are_fulfilled = !certificate_data.empty()
                                 && !signed_nonce.empty()
                                 && !_signature.empty();
 
     if (!requirements_are_fulfilled) {
+        VSOMEIP_DEBUG << __func__ << " REQUIREMENTS ARE NOT FULFILLED for client: " << _client << " service: " << _service << " instance: " << _instance << "certificate_data empty: " << certificate_data.empty() << " signed_nonce empty: " << signed_nonce.empty() << " signature empty: " << _signature.empty();
         return;
     }
 
@@ -3081,7 +3153,7 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
     }
 
 #ifdef WITH_ENCRYPTION
-    std::vector<unsigned char> blinded_secret = _blinded_secret;
+    std::vector<unsigned char> blinded_secret = eventgroup_subscriptioncache_entry.blinded_secret_;
 #endif
     std::vector<byte_t> data_to_be_verified;
     data_to_be_verified.insert(data_to_be_verified.end(), signed_nonce.begin(), signed_nonce.end());
@@ -3108,13 +3180,17 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
     std::tuple<service_t, instance_t> key_tuple = std::make_tuple(_service, _instance);
     group_secrets_.operator*()[key_tuple] = group_secret;
 #endif
+    sd_acceptance_state_t _sd_ac_state(eventgroup_subscriptioncache_entry.expired_ports_);
+    _sd_ac_state.sd_acceptance_required_ = eventgroup_subscriptioncache_entry.sd_acceptance_required_;
+    _sd_ac_state.accept_entries_ = eventgroup_subscriptioncache_entry.accept_entries_;
 
-    handle_eventgroup_subscription(_service, _instance,
-        _eventgroup, _major, _ttl, _counter, _reserved,
-        _first_address, _first_port, _is_first_reliable,
-        _second_address, _second_port, _is_second_reliable,
-        _acknowledgement, _is_stop_subscribe_subscribe,
-        _force_initial_events, _clients, _sd_ac_state, _info);
+    handle_eventgroup_subscription(eventgroup_subscriptioncache_entry.service_, eventgroup_subscriptioncache_entry.instance_,
+        eventgroup_subscriptioncache_entry.eventgroup_, eventgroup_subscriptioncache_entry.major_, eventgroup_subscriptioncache_entry.ttl_,
+        eventgroup_subscriptioncache_entry.counter_, eventgroup_subscriptioncache_entry.reserved_,
+        eventgroup_subscriptioncache_entry.first_address_, eventgroup_subscriptioncache_entry.first_port_, eventgroup_subscriptioncache_entry.is_first_reliable_,
+        eventgroup_subscriptioncache_entry.second_address_, eventgroup_subscriptioncache_entry.second_port_, eventgroup_subscriptioncache_entry.is_second_reliable_,
+        eventgroup_subscriptioncache_entry.acknowledgement_, eventgroup_subscriptioncache_entry.is_stop_subscribe_subscribe_,
+        eventgroup_subscriptioncache_entry.force_initial_events_, eventgroup_subscriptioncache_entry.clients_, _sd_ac_state, eventgroup_subscriptioncache_entry.info_);
 }
 #endif
 
@@ -3188,20 +3264,11 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
     if (!signature_verified) {
         return;
     }
-    // Addition for statistics contribution Start #################################################################
-    static bool already_contributed = false;
-    static std::mutex contribution_mutex;
-    {
-        std::lock_guard<std::mutex> contribution_guard(contribution_mutex);
-        VSOMEIP_DEBUG << __func__ << " VERIFY SERVICE SIGNATURE END";
-        statistics_recorder_->record_custom_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_START_, verify_start_time);
-        statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_END_);
+    
+    VSOMEIP_DEBUG << __func__ << " VERIFY SERVICE SIGNATURE END";
+    statistics_recorder_->record_custom_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_START_, verify_start_time);
+    statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_END_);
 
-        if(!already_contributed) {
-            statistics_recorder_->contribute_statistics();
-            already_contributed = true;
-        }
-    }
     // Addition for statistics contribution End ###################################################################
     eventgroup_subscription_ack_cache_->remove_eventgroup_subscription_ack_cache_entry(_publisher_ip_address, _service, _instance);
 #if defined(WITH_ENCRYPTION) && defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)

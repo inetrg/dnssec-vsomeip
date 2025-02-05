@@ -38,6 +38,7 @@ namespace vsomeip_v3 {
             static svcb_cache* instance_;
             std::map<std::tuple<service_t, instance_t, major_version_t, minor_version_t>, service_svcb_cache_entry> service_svcb_cache_map_;
             std::map<std::tuple<service_t, instance_t, major_version_t>, service_svcb_cache_entry> redundant_service_svcb_cache_map_;
+            std::map<service_t, service_svcb_cache_entry> unresolved_services_;
             std::map<std::tuple<client_t, service_t, instance_t, major_version_t>, client_svcb_cache_entry> client_svcb_cache_map_;
             std::tuple<service_t, instance_t, major_version_t, minor_version_t> make_service_key_tuple(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version);
             std::tuple<client_t, service_t, instance_t, major_version_t> make_client_key_tuple(client_t _client, service_t _service, instance_t _instance, major_version_t _major_version);
@@ -50,10 +51,12 @@ namespace vsomeip_v3 {
             svcb_cache& operator=(svcb_cache &) = delete;
             svcb_cache& operator=(svcb_cache &&) = delete;
 
+            void add_requested_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version);
             void add_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version, int _l4protocol, const boost::asio::ip::address_v4 _ipv4_address, uint16_t _port);
             void add_client_svcb_cache_entry(client_t _client, service_t _service, instance_t _instance, major_version_t _major_version, int _l4protocol, const boost::asio::ip::address_v4 _ipv4_address, std::set<port_t> _ports);
             void remove_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version);
             void remove_client_svcb_cache_entry(client_t _client, service_t _service, instance_t _instance, major_version_t _major_version);
+            bool is_requested_service_svcb_cache_entry(service_t _service);
             service_svcb_cache_entry get_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version);
             service_svcb_cache_entry get_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version);
             client_svcb_cache_entry get_client_svcb_cache_entry(client_t _client, service_t _service, instance_t _instance, major_version_t _major_version);

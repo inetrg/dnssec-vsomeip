@@ -20,7 +20,6 @@ public:
     void initialize_statistics(uint64_t _init_start);
     void record_timestamp_for_service(service_id_t _service_id, uint32_t _host_ip, time_metric _time_metric);
     void record_custom_timestamp_for_service(service_id_t _service_id, uint32_t _host_ip, time_metric _time_metric, uint64_t _timestamp);
-    void contribute_statistics();
     ~statistics_recorder();
 private:
     static std::mutex mutex_;
@@ -33,6 +32,7 @@ private:
     bool already_contributed_ = false;
     bool initialized_ = false;
     bool check_services_complete();
+    void contribute_statistics();
     statistics_recorder();
 };
 

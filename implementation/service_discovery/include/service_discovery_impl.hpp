@@ -494,6 +494,7 @@ public:
     void set_dns_resolver(dns_resolver* _dns_resolver);
     void set_svcb_resolver(std::shared_ptr<svcb_resolver> _svcb_resolver);
     void set_svcb_cache(svcb_cache* _svcb_cache);
+    void request_svcb(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
     void set_resume_process_offerservice_cache(resume_process_offerservice_cache* _resume_process_offerservice_cache);
     void validate_offer(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
 #endif
@@ -503,10 +504,18 @@ public:
     void set_tlsa_resolver(std::shared_ptr<tlsa_resolver> _tlsa_resolver);
     #endif
     void set_challenge_nonce_cache(std::shared_ptr<challenge_nonce_cache> _challenge_nonce_cache);
+    void set_eventgroup_subscription_cache(std::shared_ptr<eventgroup_subscription_cache> _eventgroup_subscription_cache);
     void set_eventgroup_subscription_ack_cache(std::shared_ptr<eventgroup_subscription_ack_cache> _eventgroup_subscription_ack_cache);
     void validate_subscribe_ack_and_verify_signature(
         boost::asio::ip::address_v4 _publisher_ip_address, service_t _service,
         instance_t _instance, major_version_t _major);
+#endif
+#if defined(WITH_CLIENT_AUTHENTICATION) && defined(WITH_SERVICE_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
+    // Additional Method for Service Authenticity Start ######################################################################
+    void validate_subscribe_and_verify_signature(
+        client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address,
+        service_t _service, instance_t _instance, major_version_t _major);
+    // Additional Method for Service Authenticity End ########################################################################
 #endif
     void set_statistics_recorder(std::shared_ptr<statistics_recorder> _statistics_recorder);
 
@@ -520,18 +529,7 @@ private:
         uint16_t _unreliable_port,
         std::vector<std::shared_ptr<message_impl> >& _resubscribes,
         bool _received_via_mcast);
-#if defined(WITH_CLIENT_AUTHENTICATION) && defined(WITH_SERVICE_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
-    // Additional Method for Service Authenticity Start ######################################################################
-    void validate_subscribe_and_verify_signature(client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address,
-        service_t _service, instance_t _instance, eventgroup_t _eventgroup, major_version_t _major, ttl_t _ttl, uint8_t _counter,
-        uint16_t _reserved, const boost::asio::ip::address &_first_address, uint16_t _first_port, bool _is_first_reliable,
-        const boost::asio::ip::address &_second_address, uint16_t _second_port, bool _is_second_reliable,
-        std::shared_ptr<remote_subscription_ack> &_acknowledgement, bool _is_stop_subscribe_subscribe,
-        bool _force_initial_events, const std::set<client_t> &_clients, const sd_acceptance_state_t& _sd_ac_state,
-        const std::shared_ptr<eventgroupinfo>& _info, const std::vector<unsigned char>& _signed_nonce,
-        const std::vector<unsigned char>& _blinded_secret, const std::vector<unsigned char>& _signature);
-    // Additional Method for Service Authenticity End ########################################################################
-#endif
+    
     // Addtional Member for Service Authentication Start #####################################################################
 #if WITH_DNSSEC
     dns_resolver* dns_resolver_;
@@ -541,6 +539,7 @@ private:
 #endif
 #ifdef WITH_SERVICE_AUTHENTICATION
     std::shared_ptr<challenge_nonce_cache> challenge_nonce_cache_;
+    std::shared_ptr<eventgroup_subscription_cache> eventgroup_subscription_cache_;
     std::shared_ptr<eventgroup_subscription_ack_cache> eventgroup_subscription_ack_cache_;
     crypto_operator crypto_operator_;
     #if defined(WITH_DNSSEC) && defined(WITH_DANE)

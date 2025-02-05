@@ -37,6 +37,7 @@
 
 #ifdef WITH_SERVICE_AUTHENTICATION
 #include "../../service_authentication/include/challenge_nonce_cache.hpp"
+#include "../../service_authentication/include/eventgroup_subscription_cache.hpp"
 #include "../../service_authentication/include/eventgroup_subscription_ack_cache.hpp"
     #if defined(WITH_DNSSEC) && (WITH_DANE)
 #include "../../dnssec/include/tlsa_resolver.hpp"
@@ -589,6 +590,7 @@ private:
 #endif
 #ifdef WITH_SERVICE_AUTHENTICATION
     std::shared_ptr<challenge_nonce_cache> challenge_nonce_cache_;
+    std::shared_ptr<eventgroup_subscription_cache> eventgroup_subscription_cache_;
     std::shared_ptr<eventgroup_subscription_ack_cache> eventgroup_subscription_ack_cache_;
     #if defined(WITH_DNSSEC) && defined(WITH_DANE)
     std::shared_ptr<tlsa_resolver> tlsa_resolver_;
