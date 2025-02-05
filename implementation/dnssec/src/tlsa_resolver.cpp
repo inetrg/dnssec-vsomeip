@@ -68,12 +68,12 @@ namespace vsomeip_v3 {
             return;
         }
 
-        if (_timeouts) {
-            VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
-            clientdata_and_cbs->notify_waiting_thread();
-            delete clientdata_and_cbs;
-            return;
-        }
+        // if (_timeouts) {
+        //     VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
+        //     clientdata_and_cbs->notify_waiting_thread();
+        //     delete clientdata_and_cbs;
+        //     return;
+        // }
         VSOMEIP_DEBUG << __func__ << " TLSA CLIENT RESPONSE RECEIVE";
         clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::TLSA_CLIENT_RESPONSE_RECEIVE_);
 

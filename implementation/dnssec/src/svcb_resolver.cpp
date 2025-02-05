@@ -27,11 +27,11 @@ namespace vsomeip_v3 {
             return;
         }
 
-        if (_timeouts) {
-            std::cerr << __func__ << " DNS request timeout" << std::endl;
-            delete servicedata_and_cbs;
-            return;
-        }
+        // if (_timeouts) {
+        //     std::cerr << __func__ << " DNS request timeout" << std::endl;
+        //     delete servicedata_and_cbs;
+        //     return;
+        // }
         VSOMEIP_DEBUG << __func__ << " SVCB SERVICE RESPONSE RECEIVE";
         servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->service_, servicedata_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_RESPONSE_RECEIVE_);
 
@@ -84,11 +84,11 @@ namespace vsomeip_v3 {
             return;
         }
 
-        if (_timeouts) {
-            std::cerr << __func__ << " DNS request timeout" << std::endl;
-            delete clientdata_and_cbs;
-            return;
-        }
+        // if (_timeouts) {
+        //     std::cerr << __func__ << " DNS request timeout" << std::endl;
+        //     delete clientdata_and_cbs;
+        //     return;
+        // }
         VSOMEIP_DEBUG << __func__ << " SVCB CLIENT RESPONSE RECEIVE";
         clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_RESPONSE_RECEIVE_);
 
