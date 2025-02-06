@@ -20,12 +20,19 @@ callbacks(int numRequest_, std::string processId_) : numRequest(numRequest_), pr
 ~callbacks() {}
 // record timestamp callback
 void record_timestamp_callback(service_t _service, uint32_t _ipv4_address, time_metric _time_metric) {
+    (void)_service;
+    (void)_ipv4_address;
+    (void)_time_metric;
     // print the result
     // std::cout << "Service: " << _service << " IPv4 Address: " << _ipv4_address << " Time Metric: " << _time_metric << std::endl;
 }
 
 // add publisher certificate callback
 void add_publisher_certificate_callback(boost::asio::ip::address_v4 _ipv4_address, service_t _service, instance_t _instance, std::vector<unsigned char> _certificate_association_data) {
+    (void)_ipv4_address;
+    (void)_service;
+    (void)_instance;
+    (void)_certificate_association_data;
     // print the result
     // std::cout << "IPv4 Address: " << _ipv4_address << " Service: " << _service << " Instance: " << _instance << " Certificate Association Data: ";
     // for (auto i : _certificate_association_data) {
@@ -36,6 +43,10 @@ void add_publisher_certificate_callback(boost::asio::ip::address_v4 _ipv4_addres
 
 // validate subscribe ack and verify signature callback
 void validate_subscribe_ack_and_verify_signature_callback(boost::asio::ip::address_v4 _ipv4_address, service_t _service, instance_t _instance, major_version_t _major) {
+    (void)_ipv4_address;
+    (void)_service;
+    (void)_instance;
+    (void)_major;
     // print the result
     ++count;
     std::cout << "finished (process " << processId << ", count " << count << ")" << std::endl;
@@ -43,11 +54,6 @@ void validate_subscribe_ack_and_verify_signature_callback(boost::asio::ip::addre
         std::cout << "success (process " << processId << ", num_requests " << numRequest << ")" << std::endl;
         cv.notify_all();
     }
-}
-
-void request_time_out_callback(service_t _service, instance_t _instance) {
-    // print the result
-    std::cout << "Request Time Out" << std::endl;
 }
 
 // Funktion zum Warten auf die Bedingungsvariable

@@ -18,6 +18,7 @@ namespace vsomeip_v3 {
 
     void service_svcb_resolve_callback(void* _data, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
+        (void)_timeouts;
         LOG_DEBUG(__func__ << " is called")
         service_data_and_cbs* servicedata_and_cbs = reinterpret_cast<service_data_and_cbs*>(_data);
         
@@ -75,6 +76,7 @@ namespace vsomeip_v3 {
 
     void client_svcb_resolve_callback(void* _data, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
+        (void)_timeouts;
         LOG_DEBUG(__func__ << " is called")
         client_data_and_cbs* clientdata_and_cbs = reinterpret_cast<client_data_and_cbs*>(_data);
         

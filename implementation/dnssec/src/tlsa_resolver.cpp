@@ -15,6 +15,7 @@ namespace vsomeip_v3 {
 
     void service_tlsa_resolve_callback(void* _data, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
+        (void)_timeouts;
         service_data_and_cbs* servicedata_and_cbs = reinterpret_cast<service_data_and_cbs*>(_data);
         
         if (_status) {
@@ -59,6 +60,7 @@ namespace vsomeip_v3 {
 
     void client_tlsa_resolve_callback(void* _data, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
+        (void)_timeouts;
         client_data_and_cbs* clientdata_and_cbs = reinterpret_cast<client_data_and_cbs*>(_data);
         VSOMEIP_DEBUG << __func__ << " TLSA CLIENT RESPONSE RECEIVE";
         if (_status) {

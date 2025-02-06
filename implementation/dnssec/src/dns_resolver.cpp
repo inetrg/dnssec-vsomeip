@@ -105,7 +105,8 @@ int dns_resolver::change_dns_server(ares_channel& _channel, in_addr_t _address) 
     servers.next = nullptr;
     servers.family = AF_INET;
     servers.addr.addr4.s_addr = htonl(_address);
-    return ares_set_servers(_channel, &servers);
+    // return ares_set_servers(_channel, &servers);
+    return ares_set_servers_csv(_channel, inet_ntoa(servers.addr.addr4));
 }
 
 int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
@@ -152,10 +153,6 @@ int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
 
 void dns_resolver::process() {
     static int lookups = 0;
-    int nfds/*, count*/;
-    fd_set readers, writers;
-    struct timeval tv, *tvp;
-    //bool waitBool;
     while (state_ != STOPPED) {
         LOG_DEBUG("Process thread performed unique lock")
         {
@@ -170,6 +167,9 @@ void dns_resolver::process() {
             dns_request* dns_request;
             {
                 std::lock_guard<std::mutex> lockguard(mutex_);
+                if (dns_requests_.empty()) {
+                    continue;
+                }
                 dns_request = dns_requests_.front();
                 dns_requests_.pop_front();
                 std::cout << process_id_ << " Request popped from queue, new size: " << dns_requests_.size() << std::endl;
