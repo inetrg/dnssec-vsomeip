@@ -22,35 +22,14 @@ public:
             app_(vsomeip::runtime::get()->create_application()), 
             use_tcp_(_use_tcp), 
             service_id_(SAMPLE_SERVICE_ID), 
-            instance_id_(SAMPLE_INSTANCE_ID), 
-            wait_ms_(0) {
+            instance_id_(SAMPLE_INSTANCE_ID) {
     }
 
-    my_subscriber_app(bool _use_tcp, uint16_t _service_id, uint16_t _instance_id, int _wait_ms) :
+    my_subscriber_app(bool _use_tcp, uint16_t _service_id, uint16_t _instance_id) :
             app_(vsomeip::runtime::get()->create_application()), 
             use_tcp_(_use_tcp), 
             service_id_(_service_id), 
-            instance_id_(_instance_id), 
-            wait_ms_(_wait_ms) {
-    }
-
-    void delayed_start() {
-        std::this_thread::sleep_for(std::chrono::milliseconds((int)(wait_ms_)));
-
-        // todo fix event group -- make parameters?
-        uint16_t event_group_id = 30000+service_id_;
-        uint16_t event_id = 10000+service_id_;
-
-        std::set<vsomeip::eventgroup_t> its_groups;
-        its_groups.insert(event_group_id);
-        app_->request_event(
-                service_id_,
-                instance_id_,
-                event_id,
-                its_groups,
-                vsomeip::event_type_e::ET_FIELD);
-        app_->subscribe(service_id_, instance_id_, event_group_id);  
-        app_->request_service(service_id_, instance_id_);
+            instance_id_(_instance_id) {
     }
 
     bool init() {
@@ -77,7 +56,21 @@ public:
                           this,
                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
-        start_delay_thread_ = std::thread(&my_subscriber_app::delayed_start, this);
+        // todo fix event group -- make parameters?
+        uint16_t event_group_id = 30000+service_id_;
+        uint16_t event_id = 10000+service_id_;
+
+        std::set<vsomeip::eventgroup_t> its_groups;
+        its_groups.insert(event_group_id);
+        app_->request_event(
+                service_id_,
+                instance_id_,
+                event_id,
+                its_groups,
+                vsomeip::event_type_e::ET_FIELD);
+        app_->subscribe(service_id_, instance_id_, event_group_id);  
+        app_->request_service(service_id_, instance_id_);
+
         return true;
     }
 
@@ -100,7 +93,7 @@ public:
 
     void on_state(vsomeip::state_type_e _state) {
         if (_state == vsomeip::state_type_e::ST_REGISTERED) {
-            // app_->request_service(service_id_, instance_id_);
+            app_->request_service(service_id_, instance_id_);
         }
     }
 
@@ -135,8 +128,6 @@ private:
     bool use_tcp_;
     uint16_t service_id_;
     uint16_t instance_id_;
-    int wait_ms_;
-    std::thread start_delay_thread_;
 };
 
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
@@ -152,13 +143,11 @@ int main(int argc, char **argv) {
     bool use_tcp = false;
     uint16_t service_id = SAMPLE_SERVICE_ID;
     uint16_t instance_id = SAMPLE_INSTANCE_ID;
-    int wait_ms = 1000;
 
     std::string tcp_enable("--tcp");
     std::string udp_enable("--udp");
     std::string service_arg("--serviceid");
     std::string instance_arg("--instanceid");
-    std::string wait_arg("--waitms");
 
     for (int i = 1; i < argc; i++) {
         if (tcp_enable == argv[i]) {
@@ -179,15 +168,9 @@ int main(int argc, char **argv) {
             converter << argv[i];
             converter >> instance_id;
         }
-        else if (wait_arg == argv[i] && i + 1 < argc) {
-            i++;
-            std::stringstream converter;
-            converter << argv[i];
-            converter >> wait_ms;
-        }
     }
 
-    my_subscriber_app subscriber_app(use_tcp, service_id, instance_id, 1000);
+    my_subscriber_app subscriber_app(use_tcp, service_id, instance_id);
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
     subscriber_app_ptr = &subscriber_app;
     signal(SIGINT, handle_signal);
