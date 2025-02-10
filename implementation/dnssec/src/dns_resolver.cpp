@@ -100,7 +100,7 @@ void dns_resolver::conn_refused() {
     conn_refuse_wait_us_ = std::chrono::microseconds(CONN_REFUSE_WAIT_US);
 }
 
-int dns_resolver::change_dns_server(ares_channel& _channel, in_addr_t _address) {
+int dns_resolver::change_dns_server(ares_channel_t* _channel, in_addr_t _address) {
     ares_addr_node servers;
     servers.next = nullptr;
     servers.family = AF_INET;
@@ -110,7 +110,7 @@ int dns_resolver::change_dns_server(ares_channel& _channel, in_addr_t _address) 
 }
 
 int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
-    std::lock_guard<std::mutex> lock_guard(mutex_);
+    // std::lock_guard<std::mutex> lock_guard(mutex_);
     if (!initialized_) {
         ares_library_init(ARES_LIB_INIT_ALL);
         std::cout << "Ares library initialized" << std::endl;
@@ -130,8 +130,9 @@ int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
         optmask |= ARES_OPT_FLAGS;
         // optmask |= ARES_OPT_EDNSPSZ;
         // options.ednspsz = EDNSPKSZ;
-        if (ares_init_options(&channel_, &options, optmask) != ARES_SUCCESS) {
-            std::cout << "Initializing with options failed" << std::endl;
+        int ret = ares_init_options(&channel_, &options, optmask);
+        if (ret != ARES_SUCCESS) {
+            std::cout << "Initializing with options failed with error code: " << ret << std::endl;
             return 1;
         }
         ares_destroy_options(&options);
@@ -142,8 +143,8 @@ int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
         conn_refuse_wait_us_ = std::chrono::microseconds(0);
         process_id_ = _process_id;
         state_ = STARTED;
-        process_thread_ = std::thread(&dns_resolver::process, this);
         initialized_ = true;
+        process_thread_ = std::thread(&dns_resolver::process, this);
         LOG_DEBUG("Process Thread is initialized")
     } else {
         LOG_DEBUG("Process Thread is already initialized")
@@ -199,10 +200,13 @@ void dns_resolver::cleanup() {
     if (initialized_) {
         LOG_DEBUG("Cleanup begins")
         state_ = STOPPED;
+        ares_cancel(channel_);
         condition_variable_.notify_one();
+        ares_cancel(channel_);
         process_thread_.join();
         ares_destroy(channel_);
         ares_library_cleanup();
         LOG_DEBUG("Cleanup finished")
+        std::cout << "Cleanup finished" << std::endl;
     }
 }

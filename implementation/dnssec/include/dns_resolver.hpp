@@ -42,13 +42,13 @@ private:
     const int STOPPED = 1;
     int state_ = STOPPED;
     bool initialized_ = false;
-    ares_channel channel_;
+    ares_channel_t* channel_;
     std::thread process_thread_;
     std::condition_variable condition_variable_;
     static std::mutex mutex_;
     static dns_resolver* instance_;
     void process();
-    int change_dns_server(ares_channel& _channel, in_addr_t _address);
+    int change_dns_server(ares_channel_t* _channel, in_addr_t _address);
     std::deque<dns_request*> dns_requests_;
     std::string process_id_;
     std::chrono::microseconds conn_refuse_wait_us_;
