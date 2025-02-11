@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 #include "../../configuration/include/configuration.hpp"
 
 std::mutex statistics_recorder::mutex_;
@@ -77,11 +78,12 @@ void statistics_recorder::record_custom_timestamp_for_service(service_id_t _serv
                 entries_complete_[_service_id] = std::set<host_key_t>();
             }
             entries_complete_[_service_id].insert(_host_ip);
-            if (check_services_complete()) {
+            if (check_services_complete() && !already_contributed_) {
                 VSOMEIP_DEBUG << __func__ << " All services completed ... contributing ";
                 // all services are complete
                 // contribute statistics
-                contribute_statistics();
+                std::thread(&statistics_recorder::contribute_statistics, this).detach();
+                already_contributed_ = true;
             }
         }
     }
@@ -93,9 +95,6 @@ void statistics_recorder::record_timestamp_for_service(service_id_t _service_id,
 }
 
 void statistics_recorder::contribute_statistics() {
-    if (already_contributed_) {
-        return;
-    }
     bool waited_for_shm = false;
     for (bool shared_objects_initialized = false; !shared_objects_initialized;) {
         try {
@@ -147,7 +146,6 @@ void statistics_recorder::contribute_statistics() {
             sleep(1);
         }
     }
-    already_contributed_ = true;
 }
 
 bool statistics_recorder::check_services_complete() {
