@@ -101,7 +101,7 @@ public:
 
     // Addition for Service Authentication Start #########################################################################
 #ifdef WITH_DNSSEC
-    virtual void set_dns_resolver(dns_resolver* _dns_resolver) = 0;
+    virtual void set_dns_resolver(std::shared_ptr<dns_resolver> _dns_resolver) = 0;
     virtual void set_svcb_resolver(std::shared_ptr<svcb_resolver> _svcb_resolver) = 0;
     virtual void set_svcb_cache(svcb_cache* _svcb_cache) = 0;
     virtual void request_svcb(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor) = 0;

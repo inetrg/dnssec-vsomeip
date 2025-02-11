@@ -392,6 +392,9 @@ private:
 
     std::mutex serialize_mutex_;
 
+    std::recursive_mutex process_offer_mutex_;
+    std::mutex process_susbcribe_ack_mutex_;
+
     // Sessions
     std::map<boost::asio::ip::address, std::pair<session_t, bool> > sessions_sent_;
     std::map<boost::asio::ip::address,
@@ -491,7 +494,7 @@ public:
 #endif
 
 #ifdef WITH_DNSSEC
-    void set_dns_resolver(dns_resolver* _dns_resolver);
+    void set_dns_resolver(std::shared_ptr<dns_resolver> _dns_resolver);
     void set_svcb_resolver(std::shared_ptr<svcb_resolver> _svcb_resolver);
     void set_svcb_cache(svcb_cache* _svcb_cache);
     void request_svcb(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
@@ -532,7 +535,7 @@ private:
     
     // Addtional Member for Service Authentication Start #####################################################################
 #if WITH_DNSSEC
-    dns_resolver* dns_resolver_;
+    std::shared_ptr<dns_resolver> dns_resolver_;
     std::shared_ptr<svcb_resolver> svcb_resolver_;
     svcb_cache* svcb_cache_;
     resume_process_offerservice_cache* resume_process_offerservice_cache_;

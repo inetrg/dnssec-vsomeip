@@ -6,8 +6,7 @@
 #include <cstring>
 
 namespace vsomeip_v3 {
-    tlsa_resolver::tlsa_resolver(in_addr_t _dns_server_ip, std::string _process_id) : dns_resolver_(dns_resolver::get_instance()) {
-        dns_resolver_->initialize(_dns_server_ip, _process_id);
+    tlsa_resolver::tlsa_resolver(std::shared_ptr<dns_resolver> _dns_resolver) : dns_resolver_(_dns_resolver) {
     }
 
     tlsa_resolver::~tlsa_resolver() {

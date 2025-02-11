@@ -66,9 +66,8 @@ void wait_for_requests() {
 
 service_data_and_cbs* create_service_data(crypto_operator* crypto_operator_, callbacks* callbacks_) {
     // create a service data structure to look up 
-    // _someip.minor0x00000000.major0x00.instance0x0001.id0x0842.service.
     service_data_and_cbs* service_data = new service_data_and_cbs();
-    service_data->service_ = 0x0842;
+    service_data->service_ = 0x0001;
     service_data->instance_ = 0x0001;
     service_data->major_ = 0x00;
     service_data->minor_ = 0x00000000;
@@ -80,7 +79,7 @@ service_data_and_cbs* create_service_data(crypto_operator* crypto_operator_, cal
     return service_data;
 }
 
-// main launch function to test the DNS resolver
+// main launch function to test the DNS resolver 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
         std::cerr << "Usage: " << argv[0] << " <num_requests> <process_id>" << std::endl;
@@ -97,12 +96,12 @@ int main(int argc, char* argv[]) {
     uint32_t dns_ip = 0xAC148CEA; // 0xAC=172 0x14=20 0x8C=140 0xEA=234
 
     // create a new DNS resolver for tlsa records
-    std::shared_ptr<tlsa_resolver> tlsa_resolver_ = std::make_shared<tlsa_resolver>(dns_ip, process_id);
+    std::shared_ptr<dns_resolver> dns_resolver_ = std::make_shared<dns_resolver>(dns_ip, process_id);
+    std::shared_ptr<tlsa_resolver> tlsa_resolver_ = std::make_shared<tlsa_resolver>(dns_resolver_);
 
     // request the service tlsa record
     for (int i = 0; i < numRequest; i++) {
         tlsa_resolver_->request_service_tlsa_record(create_service_data(&crypto_operator_, &callbacks_));
     }
-
     callbacks_.wait_for_requests();
 }

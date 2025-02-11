@@ -87,8 +87,8 @@ routing_manager_impl::routing_manager_impl(routing_manager_host *_host) :
         statistics_log_timer_(_host->get_io()),
         ignored_statistics_counter_(0)
 #ifdef WITH_DNSSEC
-        ,dns_resolver_(dns_resolver::get_instance()),
-        svcb_resolver_(std::make_shared<svcb_resolver>(configuration_->get_dns_server_ip())),
+        ,dns_resolver_(std::make_shared<dns_resolver>(configuration_->get_dns_server_ip(), "")),
+        svcb_resolver_(std::make_shared<svcb_resolver>(dns_resolver_)),
         svcb_cache_(svcb_cache::get_instance()),
         resume_process_offerservice_cache_(resume_process_offerservice_cache::get_instance())
 #endif
@@ -97,7 +97,7 @@ routing_manager_impl::routing_manager_impl(routing_manager_host *_host) :
         eventgroup_subscription_cache_(std::make_shared<eventgroup_subscription_cache>()),
         eventgroup_subscription_ack_cache_(std::make_shared<eventgroup_subscription_ack_cache>())
     #if defined(WITH_DNSSEC) && defined(WITH_DANE)
-        ,tlsa_resolver_(std::make_shared<tlsa_resolver>(configuration_->get_dns_server_ip()))
+        ,tlsa_resolver_(std::make_shared<tlsa_resolver>(dns_resolver_))
     #endif
     #if defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD) && defined(WITH_ENCRYPTION)
         ,encrypted_group_secret_result_cache_(std::make_shared<encrypted_group_secret_result_cache>())

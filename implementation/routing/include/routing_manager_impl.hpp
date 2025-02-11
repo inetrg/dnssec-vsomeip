@@ -583,7 +583,7 @@ private:
 
     // Addtional Member for Service Authenticity
 #ifdef WITH_DNSSEC
-    dns_resolver* dns_resolver_;
+    std::shared_ptr<dns_resolver> dns_resolver_;
     std::shared_ptr<svcb_resolver> svcb_resolver_;
     svcb_cache* svcb_cache_;
     resume_process_offerservice_cache* resume_process_offerservice_cache_;

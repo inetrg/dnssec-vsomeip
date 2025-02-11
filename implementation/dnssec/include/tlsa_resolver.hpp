@@ -7,9 +7,9 @@
 namespace vsomeip_v3 {
     class tlsa_resolver {
         private:
-            dns_resolver* dns_resolver_;
+        std::shared_ptr<dns_resolver> dns_resolver_;
         public:
-            tlsa_resolver(in_addr_t _dns_server_ip, std::string _process_id="");
+            tlsa_resolver(std::shared_ptr<dns_resolver> _dns_resolver);
             ~tlsa_resolver();
             void request_service_tlsa_record(void* _service_data);
             void request_client_tlsa_record(void* _client_data);

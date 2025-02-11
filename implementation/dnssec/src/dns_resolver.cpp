@@ -8,9 +8,6 @@
 #include <string.h>
 
 #define EDNSPKSZ 1280 // https://datatracker.ietf.org/doc/html/rfc6891
-#define CONN_REFUSE_WAIT_US 1000000
-std::mutex dns_resolver::mutex_;
-dns_resolver* dns_resolver::instance_;
 
 void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen) {
     bool retry = false;
@@ -23,7 +20,6 @@ void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _ab
         break;
     case ARES_ECONNREFUSED:
         std::cout << "Query for " << query->name_ << " could not be completed because the connection was refused" << std::endl;
-        query->resolver_->conn_refused();
         retry = true;
         break;
     case ARES_ENODATA:
@@ -68,17 +64,12 @@ void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _ab
     delete query;
 }
 
-dns_resolver* dns_resolver::get_instance() {
-    std::lock_guard<std::mutex> lockguard(mutex_);
-    if(instance_ == nullptr) {
-        instance_ = new dns_resolver();
-    }
-    return instance_;
-}
-
 void dns_resolver::resolve(const char* _name, int _dnsclass, int _type, ares_callback _callback, void* _arg) {
-    if (!initialized_)
-        throw std::runtime_error("dns_resolver is not initialized, call initialize() first!");
+    if (!initialized_) {
+        std::cout << "dns_resolver is not initialized, retrying initialization... " << std::endl;
+        initialize();
+    }
+        // throw std::runtime_error("dns_resolver is not initialized, call initialize() first!");
     dns_request* _dns_request = new dns_request();
     char* url = (char*)malloc(strlen(_name)+1);
     strcpy(url, _name);
@@ -96,21 +87,18 @@ void dns_resolver::resolve(const char* _name, int _dnsclass, int _type, ares_cal
     condition_variable_.notify_one();
 }
 
-void dns_resolver::conn_refused() {
-    conn_refuse_wait_us_ = std::chrono::microseconds(CONN_REFUSE_WAIT_US);
-}
-
-int dns_resolver::change_dns_server(ares_channel_t* _channel, in_addr_t _address) {
+int dns_resolver::change_dns_server(in_addr_t _address) {
+    address_ = _address;
     ares_addr_node servers;
     servers.next = nullptr;
     servers.family = AF_INET;
     servers.addr.addr4.s_addr = htonl(_address);
     // return ares_set_servers(_channel, &servers);
-    return ares_set_servers_csv(_channel, inet_ntoa(servers.addr.addr4));
+    return ares_set_servers_csv(channel_, inet_ntoa(servers.addr.addr4));
 }
 
-int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
-    // std::lock_guard<std::mutex> lock_guard(mutex_);
+int dns_resolver::initialize() {
+    std::lock_guard<std::mutex> lock_guard(mutex_);
     if (!initialized_) {
         ares_library_init(ARES_LIB_INIT_ALL);
         std::cout << "Ares library initialized" << std::endl;
@@ -130,18 +118,21 @@ int dns_resolver::initialize(in_addr_t _address, std::string _process_id) {
         optmask |= ARES_OPT_FLAGS;
         // optmask |= ARES_OPT_EDNSPSZ;
         // options.ednspsz = EDNSPKSZ;
+        // struct in_addr* server = new in_addr();
+        // server->s_addr = htonl(address_);
+        // options.servers = server;
+        // options.nservers = 1;
+        // optmask |= ARES_OPT_SERVERS;
         int ret = ares_init_options(&channel_, &options, optmask);
         if (ret != ARES_SUCCESS) {
             std::cout << "Initializing with options failed with error code: " << ret << std::endl;
             return 1;
         }
         ares_destroy_options(&options);
-        if (change_dns_server(channel_, _address) != ARES_SUCCESS) {
+        if (change_dns_server(address_) != ARES_SUCCESS) {
             std::cout << "Setting servers failed" << std::endl;
             return 1;
         }
-        conn_refuse_wait_us_ = std::chrono::microseconds(0);
-        process_id_ = _process_id;
         state_ = STARTED;
         initialized_ = true;
         process_thread_ = std::thread(&dns_resolver::process, this);
@@ -159,10 +150,6 @@ void dns_resolver::process() {
         {
             std::unique_lock<std::mutex> unique_lock(mutex_);
             condition_variable_.wait(unique_lock, [this] { return !dns_requests_.empty() || state_ == STOPPED; });
-        }
-        if (conn_refuse_wait_us_.count() > 0) {
-            std::this_thread::sleep_for(conn_refuse_wait_us_);
-            conn_refuse_wait_us_ = std::chrono::microseconds(0);
         }
         if (state_ != STOPPED) {
             dns_request* dns_request;
@@ -185,7 +172,10 @@ void dns_resolver::process() {
     LOG_DEBUG("Process thread terminated")
 }
 
-dns_resolver::dns_resolver() {
+dns_resolver::dns_resolver(in_addr_t _address, std::string _process_id) {
+    address_ = _address;
+    process_id_ = _process_id;
+    initialize();
 }
 
 dns_resolver::~dns_resolver() {

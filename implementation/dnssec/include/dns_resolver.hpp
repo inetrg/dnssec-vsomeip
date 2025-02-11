@@ -29,15 +29,14 @@ struct dns_request {
 class dns_resolver {
 
 public:
-    static dns_resolver* get_instance();
-    int initialize(in_addr_t _address=DEFAULT_SERVER, std::string _process_id="");
+    dns_resolver(in_addr_t _address=DEFAULT_SERVER, std::string _process_id="");
+    ~dns_resolver();
     void cleanup();
     void resolve(const char* _name, int _dnsclass, int _type, ares_callback _callback, void* _arg);
-    void conn_refused();
+    int change_dns_server(in_addr_t _address);
 protected:
 private:
-    dns_resolver();
-    ~dns_resolver();
+    int initialize();
     const int STARTED = 0;
     const int STOPPED = 1;
     int state_ = STOPPED;
@@ -45,13 +44,11 @@ private:
     ares_channel_t* channel_;
     std::thread process_thread_;
     std::condition_variable condition_variable_;
-    static std::mutex mutex_;
-    static dns_resolver* instance_;
+    std::mutex mutex_;
     void process();
-    int change_dns_server(ares_channel_t* _channel, in_addr_t _address);
+    in_addr_t address_;
     std::deque<dns_request*> dns_requests_;
     std::string process_id_;
-    std::chrono::microseconds conn_refuse_wait_us_;
 };
 
 #endif //VSOMEIP_DNS_RESOLVER_HPP

@@ -1631,7 +1631,7 @@ service_discovery_impl::process_serviceentry(
 
 #ifdef WITH_DNSSEC
 void
-service_discovery_impl::set_dns_resolver(dns_resolver* _dns_resolver) {
+service_discovery_impl::set_dns_resolver(std::shared_ptr<dns_resolver> _dns_resolver) {
     this->dns_resolver_ = _dns_resolver;
 }
 
@@ -1845,7 +1845,8 @@ service_discovery_impl::process_offerservice_serviceentry(
     std::shared_ptr < runtime > its_runtime = runtime_.lock();
     if (!its_runtime)
         return;
-
+    
+    std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
     bool is_secure = configuration_->is_secure_service(_service, _instance);
     if (is_secure &&
             ((_reliable_port != ILLEGAL_PORT &&
@@ -1989,6 +1990,7 @@ service_discovery_impl::process_offerservice_serviceentry(
 
 void
 service_discovery_impl::validate_offer(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor) {
+    std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
     resume_process_offerservice_entry resume_processofferservice_entry = resume_process_offerservice_cache_->get_offerservice_entry(_service, _instance, _major, _minor);
 #ifndef NO_SOMEIP_SD
     VSOMEIP_DEBUG << __func__ << " VALIDATE OFFER START";
@@ -2050,7 +2052,7 @@ service_discovery_impl::resume_process_offerservice_serviceentry(
     bool _received_via_mcast) {
 
     // NOTE: Code below belongs actually in to the process_offerservice_serviceentry method above
-
+    std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
     // No need to resubscribe for unicast offers
     if (_received_via_mcast) {
         auto found_service = subscribed_.find(_service);
@@ -3197,6 +3199,8 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
 #ifdef WITH_SERVICE_AUTHENTICATION
 void
 service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio::ip::address_v4 _publisher_ip_address, service_t _service, instance_t _instance, major_version_t _major) {
+    std::lock_guard<std::recursive_mutex> subscribe_lock(subscribed_mutex_);
+    std::lock_guard<std::mutex> process_subscribe_ack_lock(process_susbcribe_ack_mutex_);
     VSOMEIP_DEBUG << __func__ << " VERIFY SERVICE SIGNATURE START";
     uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
     // Check if required subscription ack, signature and certificate are available/cached
