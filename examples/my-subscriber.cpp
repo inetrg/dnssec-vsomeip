@@ -67,7 +67,8 @@ public:
                 instance_id_,
                 event_id,
                 its_groups,
-                vsomeip::event_type_e::ET_FIELD);
+                vsomeip::event_type_e::ET_FIELD,
+                vsomeip::reliability_type_e::RT_UNRELIABLE);
         app_->subscribe(service_id_, instance_id_, event_group_id);  
         app_->request_service(service_id_, instance_id_);
 

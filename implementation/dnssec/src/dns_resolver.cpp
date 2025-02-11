@@ -6,6 +6,7 @@
 #include "../include/logger.hpp"
 #include <arpa/inet.h>
 #include <string.h>
+#include <vsomeip/internal/logger.hpp>
 
 #define EDNSPKSZ 1280 // https://datatracker.ietf.org/doc/html/rfc6891
 
@@ -20,6 +21,7 @@ void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _ab
         break;
     case ARES_ECONNREFUSED:
         std::cout << "Query for " << query->name_ << " could not be completed because the connection was refused" << std::endl;
+        VSOMEIP_DEBUG << __func__ << " Connection refused for query: " << query->name_ << std::endl;
         retry = true;
         break;
     case ARES_ENODATA:
@@ -126,17 +128,20 @@ int dns_resolver::initialize() {
         int ret = ares_init_options(&channel_, &options, optmask);
         if (ret != ARES_SUCCESS) {
             std::cout << "Initializing with options failed with error code: " << ret << std::endl;
+            VSOMEIP_DEBUG << __func__ << " Initializing with options failed with error code: " << ret << std::endl;
             return 1;
         }
         ares_destroy_options(&options);
         if (change_dns_server(address_) != ARES_SUCCESS) {
             std::cout << "Setting servers failed" << std::endl;
+            VSOMEIP_DEBUG << __func__ << " Setting servers failed" << std::endl;
             return 1;
         }
         state_ = STARTED;
         initialized_ = true;
         process_thread_ = std::thread(&dns_resolver::process, this);
         LOG_DEBUG("Process Thread is initialized")
+        VSOMEIP_DEBUG << __func__ << " Successfully initialized" << std::endl;
     } else {
         LOG_DEBUG("Process Thread is already initialized")
     }

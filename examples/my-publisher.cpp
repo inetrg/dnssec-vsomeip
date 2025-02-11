@@ -62,7 +62,7 @@ public:
                 event_id,
                 its_groups,
                 vsomeip::event_type_e::ET_FIELD, std::chrono::milliseconds::zero(),
-                false, true, nullptr, vsomeip::reliability_type_e::RT_UNKNOWN);
+                false, true, nullptr, vsomeip::reliability_type_e::RT_UNRELIABLE);
         {
             std::lock_guard<std::mutex> its_lock(payload_mutex_);
             payload_ = vsomeip::runtime::get()->create_payload();
