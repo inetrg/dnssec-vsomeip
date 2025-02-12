@@ -15,7 +15,7 @@ namespace vsomeip_v3 {
     svcb_resolver::~svcb_resolver() {
     }
 
-    void service_svcb_resolve_callback(void* _data, int _status, int _timeouts,
+    void svcb_resolver::service_svcb_resolve_callback(void* _data, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
         (void)_timeouts;
         LOG_DEBUG(__func__ << " is called")
@@ -73,7 +73,7 @@ namespace vsomeip_v3 {
         delete_svcb_reply(svcbreply);
     }
 
-    void client_svcb_resolve_callback(void* _data, int _status, int _timeouts,
+    void svcb_resolver::client_svcb_resolve_callback(void* _data, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
         (void)_timeouts;
         LOG_DEBUG(__func__ << " is called")
@@ -146,9 +146,9 @@ namespace vsomeip_v3 {
         request << ".";
         request << SERVICE_PARENTDOMAIN;
         _service_data_and_cbs->record_timestamp_callback_(_service_data_and_cbs->service_, _service_data_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_REQUEST_SEND_);
-        VSOMEIP_DEBUG << __func__ << " SVCB SERVICE REQUEST SEND";
-        VSOMEIP_DEBUG << "SVCB Requested Service: " << _service_data_and_cbs->service_;
-        dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, service_svcb_resolve_callback, _service_data_and_cbs);
+        resolver_callback callback = std::bind(&svcb_resolver::service_svcb_resolve_callback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+        VSOMEIP_DEBUG << __func__ << "SVCB Requested Service: " << _service_data_and_cbs->service_;
+        dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, callback, _service_data_and_cbs);
     }
 
     void svcb_resolver::request_client_svcb_record(client_data_and_cbs* _client_data_and_cbs) {
@@ -169,6 +169,7 @@ namespace vsomeip_v3 {
         request << CLIENT_PARENTDOMAIN;
         VSOMEIP_DEBUG << __func__ << " SVCB CLIENT REQUEST SEND";
         _client_data_and_cbs->record_timestamp_callback_(_client_data_and_cbs->service_, _client_data_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_REQUEST_SEND_);
-        dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, client_svcb_resolve_callback, _client_data_and_cbs);
+        resolver_callback callback = std::bind(&svcb_resolver::client_svcb_resolve_callback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+        dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, callback, _client_data_and_cbs);
     }
 } /* end namespace vsomeip_v3 */

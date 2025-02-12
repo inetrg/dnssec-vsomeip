@@ -14,14 +14,16 @@
 #include <iostream>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 
 class dns_resolver;
+typedef std::function<void(void*, int, int, unsigned char*, int)> resolver_callback;
 
 struct dns_request {
     const char* name_ = "";
     int dnsclass_ = 0;
     int type_ = 0;
-    ares_callback callback_ = nullptr;
+    resolver_callback callback_;
     void* arg_ = nullptr;
     dns_resolver* resolver_ = nullptr;
 };
@@ -32,7 +34,7 @@ public:
     dns_resolver(in_addr_t _address=DEFAULT_SERVER, std::string _process_id="");
     ~dns_resolver();
     void cleanup();
-    void resolve(const char* _name, int _dnsclass, int _type, ares_callback _callback, void* _arg);
+    void resolve(const char* _name, int _dnsclass, int _type, resolver_callback _callback, void* _arg);
     int change_dns_server(in_addr_t _address);
 protected:
 private:

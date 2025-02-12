@@ -13,6 +13,8 @@ namespace vsomeip_v3 {
             ~tlsa_resolver();
             void request_service_tlsa_record(void* _service_data);
             void request_client_tlsa_record(void* _client_data);
+            void service_tlsa_resolve_callback(void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen);
+            void client_tlsa_resolve_callback(void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen);
     };
 } /* end namespace vsomeip_v3 */
 #endif /* VSOMEIP_V3_TLSA_RESOLVER_H */

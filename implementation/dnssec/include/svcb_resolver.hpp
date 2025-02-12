@@ -13,6 +13,8 @@ namespace vsomeip_v3 {
             ~svcb_resolver();
             void request_service_svcb_record(service_data_and_cbs* _service_data_and_cbs);
             void request_client_svcb_record(client_data_and_cbs* _client_data_and_cbs);
+            void service_svcb_resolve_callback(void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen);
+            void client_svcb_resolve_callback(void* _data, int _status, int _timeouts, unsigned char* _abuf, int _alen);
     };
 } /* end namespace vsomeip_v3 */
 #endif /* VSOMEIP_V3_SVCB_RESOLVER_H */

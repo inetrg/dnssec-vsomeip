@@ -66,7 +66,7 @@ void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _ab
     delete query;
 }
 
-void dns_resolver::resolve(const char* _name, int _dnsclass, int _type, ares_callback _callback, void* _arg) {
+void dns_resolver::resolve(const char* _name, int _dnsclass, int _type, resolver_callback _callback, void* _arg) {
     if (!initialized_) {
         std::cout << "dns_resolver is not initialized, retrying initialization... " << std::endl;
         initialize();
