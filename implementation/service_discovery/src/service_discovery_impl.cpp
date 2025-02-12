@@ -1654,13 +1654,6 @@ service_discovery_impl::request_svcb(service_t _service, instance_t _instance, m
                 << "]";
         return;
     }
-    // if (svcb_cache_->is_requested_service_svcb_cache_entry(_service)) {
-    //     VSOMEIP_DEBUG << __func__ << ": Already requested SVCB for ["
-    //             << std::hex << std::setfill('0')
-    //             << std::setw(4) << _service << "." << std::setw(4) << _instance
-    //             << "]";
-    //     return;    
-    // }
     if (svcb_resolver_) {
         service_data_and_cbs* servicedata_and_cbs = new service_data_and_cbs();
         servicedata_and_cbs->service_ = _service;
@@ -1714,8 +1707,6 @@ service_discovery_impl::request_svcb(service_t _service, instance_t _instance, m
                                                 std::placeholders::_3);
         servicedata_and_cbs->its_unicast_ = configuration_->get_unicast_address().to_v4();
         svcb_resolver_->request_service_svcb_record(servicedata_and_cbs);
-        svcb_cache_->add_requested_service_svcb_cache_entry(_service, _instance, _major, _minor);
-        VSOMEIP_DEBUG << __func__ << " REQUEST SVCB, placeholder added for service=" << _service << ", instance=" << _instance << ", major=" << std::atoi(reinterpret_cast<char*>(&_major)) << ", minor=" << _minor;
     }
 }
 
@@ -3060,6 +3051,7 @@ void
 service_discovery_impl::process_authentication_for_received_subscribe(
         std::shared_ptr<configuration_option_impl> _configuration_option, const boost::asio::ip::address& _sender, service_t _service, instance_t _instance, major_version_t _major,
         std::vector<unsigned char>& _signed_nonce, std::vector<unsigned char>& _signature, client_t& _client, std::vector<unsigned char>& _blinded_secret) {
+    std::lock_guard<std::mutex> subscribe_lock(process_subscribe_mutex_);
     std::vector<unsigned char> generated_nonce = data_partitioner().reassemble_data<std::vector<unsigned char>>(GENERATED_NONCE_CONFIG_OPTION_KEY, _configuration_option);
     challenge_nonce_cache_->add_subscriber_challenge_nonce(_sender.to_v4(), _service, _instance, generated_nonce);
 #if defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
@@ -3077,10 +3069,7 @@ service_discovery_impl::process_authentication_for_received_subscribe(
     // Request client tlsa record
     std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_subscriber_certificate(_client, _sender.to_v4(), _service, _instance);
     if (certificate_data.empty()) {
-        std::mutex client_tlsa_mutex;
-        std::condition_variable client_tlsa_condition_variable;
-        std::unique_lock<std::mutex> uniquelock(client_tlsa_mutex);
-        client_data_and_cbs* clientdata_and_cbs = new client_data_and_cbs(std::ref(client_tlsa_mutex), std::ref(client_tlsa_condition_variable));
+        client_data_and_cbs* clientdata_and_cbs = new client_data_and_cbs();
         clientdata_and_cbs->client_ = _client;
         clientdata_and_cbs->service_ = _service;
         clientdata_and_cbs->instance_ = _instance;
@@ -3099,8 +3088,13 @@ service_discovery_impl::process_authentication_for_received_subscribe(
                                             std::placeholders::_3);
         clientdata_and_cbs->convert_der_to_pem_callback_ = std::bind(&crypto_operator::convert_der_to_pem, &crypto_operator_,
                                                 std::placeholders::_1);
+        clientdata_and_cbs->validate_subscribe_and_verify_signature_callback_ = std::bind(&service_discovery_impl::validate_subscribe_and_verify_signature, this,
+                                                std::placeholders::_1,
+                                                std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4,
+                                                std::placeholders::_5);
         tlsa_resolver_->request_client_tlsa_record(clientdata_and_cbs);
-        client_tlsa_condition_variable.wait(uniquelock);
     }
     #endif
 #endif
@@ -3128,6 +3122,7 @@ service_discovery_impl::process_authentication_for_received_subscribe_ack(
 void
 service_discovery_impl::validate_subscribe_and_verify_signature(
         client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address, service_t _service, instance_t _instance, major_version_t _major) {
+    std::lock_guard<std::mutex> subscribe_lock(process_subscribe_mutex_);
     VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE START";
     uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
     bool requirements_are_fulfilled = false;

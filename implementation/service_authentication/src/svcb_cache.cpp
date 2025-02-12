@@ -18,21 +18,9 @@ namespace vsomeip_v3 {
         }
         return instance_;
     }
-
-    void svcb_cache::add_requested_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version) {        
-        std::lock_guard<std::mutex> lockguard(mutex_);
-        service_svcb_cache_entry& entry = unresolved_services_[_service];
-        entry.service_ = _service;
-        entry.instance_ = _instance;
-        entry.major_ = _major_version;
-        entry.minor_ = _minor_version;
-    }
     
     void svcb_cache::add_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version, int _l4protocol, const boost::asio::ip::address_v4 _ipv4_address, uint16_t _port) {
         std::lock_guard<std::mutex> lockguard(mutex_);
-        if (unresolved_services_.count(_service) > 0) {
-            unresolved_services_.erase(_service);
-        }
         auto key_tuple = make_service_key_tuple(_service, _instance, _major_version, _minor_version);
         service_svcb_cache_entry& entry = service_svcb_cache_map_[key_tuple];
         entry.service_ = _service;
@@ -73,11 +61,6 @@ namespace vsomeip_v3 {
         std::lock_guard<std::mutex> lockguard(mutex_);
         auto key_tuple = make_client_key_tuple(_client, _service, _instance, _major_version);
         client_svcb_cache_map_.erase(key_tuple);
-    }
-
-    bool svcb_cache::is_requested_service_svcb_cache_entry(service_t _service) {
-        std::lock_guard<std::mutex> lockguard(mutex_);
-        return unresolved_services_.count(_service) > 0;
     }
 
     service_svcb_cache_entry svcb_cache::get_service_svcb_cache_entry(service_t _service, instance_t _instance, major_version_t _major_version, minor_version_t _minor_version) {

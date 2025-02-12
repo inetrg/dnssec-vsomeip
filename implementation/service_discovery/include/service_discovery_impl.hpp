@@ -393,6 +393,7 @@ private:
     std::mutex serialize_mutex_;
 
     std::recursive_mutex process_offer_mutex_;
+    std::mutex process_subscribe_mutex_;
     std::mutex process_susbcribe_ack_mutex_;
 
     // Sessions

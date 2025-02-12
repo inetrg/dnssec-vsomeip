@@ -24,12 +24,6 @@ namespace vsomeip_v3 {
             return;
         }
 
-        // if (_timeouts) {
-        //     VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
-        //     std::cout << "DNS request timeout" << std::endl;
-        //     delete servicedata_and_cbs;
-        //     return;
-        // }
         VSOMEIP_DEBUG << __func__ << " TLSA SERVICE RESPONSE RECEIVE";
         servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->service_, servicedata_and_cbs->its_unicast_.to_uint(), time_metric::TLSA_SERVICE_RESPONSE_RECEIVE_);
 
@@ -64,18 +58,10 @@ namespace vsomeip_v3 {
         VSOMEIP_DEBUG << __func__ << " TLSA CLIENT RESPONSE RECEIVE";
         if (_status) {
             VSOMEIP_DEBUG << __func__ << " Bad DNS response" << std::endl;
-            clientdata_and_cbs->notify_waiting_thread();
             delete clientdata_and_cbs;
             return;
         }
 
-        // if (_timeouts) {
-        //     VSOMEIP_DEBUG << __func__ << " DNS request timeout" << std::endl;
-        //     clientdata_and_cbs->notify_waiting_thread();
-        //     delete clientdata_and_cbs;
-        //     return;
-        // }
-        VSOMEIP_DEBUG << __func__ << " TLSA CLIENT RESPONSE RECEIVE";
         clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::TLSA_CLIENT_RESPONSE_RECEIVE_);
 
         unsigned char* copy = new unsigned char[_alen];
@@ -83,7 +69,6 @@ namespace vsomeip_v3 {
         tlsa_reply* tlsareply;
         if ((parse_tlsa_reply(copy, _alen, &tlsareply)) != ARES_SUCCESS) {
             VSOMEIP_DEBUG << "Parsing client TLSA reply failed" << std::endl;
-            clientdata_and_cbs->notify_waiting_thread();
             delete clientdata_and_cbs;
             delete[] copy;
             delete_tlsa_reply(tlsareply);
@@ -96,7 +81,7 @@ namespace vsomeip_v3 {
             tlsa_reply_ptr = tlsa_reply_ptr->tlsa_reply_next_;
         }
         VSOMEIP_DEBUG << "Client TLSA Resolved Service: " << clientdata_and_cbs->service_ << " for Client: " << clientdata_and_cbs->client_;
-        clientdata_and_cbs->notify_waiting_thread();
+        clientdata_and_cbs->validate_subscribe_and_verify_signature_callback_(clientdata_and_cbs->client_, clientdata_and_cbs->ipv4_address_, clientdata_and_cbs->service_, clientdata_and_cbs->instance_, clientdata_and_cbs->major_);
         delete clientdata_and_cbs;
         delete[] copy;
         delete_tlsa_reply(tlsareply);
