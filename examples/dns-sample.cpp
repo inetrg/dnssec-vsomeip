@@ -81,13 +81,13 @@ service_data_and_cbs* create_service_data(crypto_operator* crypto_operator_, cal
 
 // main launch function to test the DNS resolver 
 int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <num_requests> <process_id>" << std::endl;
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <process_id>" << std::endl;
         return 1;
     }
 
-    int numRequest = std::stoi(argv[1]);
-    std::string process_id = argv[2];
+    int numRequest = 1;
+    std::string process_id = argv[1];
 
     crypto_operator crypto_operator_;
     callbacks callbacks_(numRequest, process_id);

@@ -46,6 +46,7 @@ namespace vsomeip_v3 {
             tlsa_reply_ptr = tlsa_reply_ptr->tlsa_reply_next_;
         }
         VSOMEIP_DEBUG << "Service TLSA Resolved Service: " << servicedata_and_cbs->service_;
+        close_service_request(servicedata_and_cbs->dns_name_);
         delete servicedata_and_cbs;
         delete[] copy;
         delete_tlsa_reply(tlsareply);
@@ -82,6 +83,7 @@ namespace vsomeip_v3 {
         }
         VSOMEIP_DEBUG << "Client TLSA Resolved Service: " << clientdata_and_cbs->service_ << " for Client: " << clientdata_and_cbs->client_;
         clientdata_and_cbs->validate_subscribe_and_verify_signature_callback_(clientdata_and_cbs->client_, clientdata_and_cbs->ipv4_address_, clientdata_and_cbs->service_, clientdata_and_cbs->instance_, clientdata_and_cbs->major_);
+        close_client_request(clientdata_and_cbs->dns_name_);
         delete clientdata_and_cbs;
         delete[] copy;
         delete_tlsa_reply(tlsareply);
@@ -100,11 +102,16 @@ namespace vsomeip_v3 {
         request << "id0x" << std::hex << std::setw(4) << std::setfill('0') << (int) servicedata_and_cbs->service_;
         request << ".";
         request << SERVICE_PARENTDOMAIN;
-        VSOMEIP_DEBUG << __func__ << " TLSA SERVICE REQUEST SEND";
+        servicedata_and_cbs->dns_name_ = request.str();
+        if (is_open_service_request(servicedata_and_cbs->dns_name_)) {
+            VSOMEIP_DEBUG << __func__ << " TLSA SERVICE REQUEST ALREADY OPEN for " << servicedata_and_cbs->dns_name_;
+            return;
+        }
+        add_service_request(servicedata_and_cbs->dns_name_, servicedata_and_cbs);
+        VSOMEIP_DEBUG << __func__ << " TLSA SERVICE REQUEST SEND for " << servicedata_and_cbs->dns_name_;
         servicedata_and_cbs->record_timestamp_callback_(servicedata_and_cbs->service_,servicedata_and_cbs->its_unicast_.to_uint(), time_metric::TLSA_SERVICE_REQUEST_SEND_);
         resolver_callback callback = std::bind(&tlsa_resolver::service_tlsa_resolve_callback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
         dns_resolver_->resolve(request.str().c_str(), C_IN, T_TLSA, callback, _service_data);
-        VSOMEIP_DEBUG << "Service TLSA Requested Service: " << servicedata_and_cbs->service_;
     }
 
     void tlsa_resolver::request_client_tlsa_record(void* _client_data) {
@@ -120,10 +127,45 @@ namespace vsomeip_v3 {
         request << "id0x" << std::hex << std::setw(4) << std::setfill('0') << (int) clientdata_and_cbs->client_;
         request << ".";
         request << CLIENT_PARENTDOMAIN;
-        VSOMEIP_DEBUG << __func__ << " TLSA CLIENT REQUEST SEND " << request.str();
+        clientdata_and_cbs->dns_name_ = request.str();
+        if (is_open_client_request(clientdata_and_cbs->dns_name_)) {
+            VSOMEIP_DEBUG << __func__ << " TLSA CLIENT REQUEST ALREADY OPEN for " << clientdata_and_cbs->dns_name_;
+            return;
+        }
+        add_client_request(clientdata_and_cbs->dns_name_, clientdata_and_cbs);
+        VSOMEIP_DEBUG << __func__ << " TLSA CLIENT REQUEST SEND for " << clientdata_and_cbs->dns_name_;
         clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::TLSA_CLIENT_REQUEST_SEND_);
         resolver_callback callback = std::bind(&tlsa_resolver::client_tlsa_resolve_callback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
-        dns_resolver_->resolve(request.str().c_str(), C_IN, T_TLSA, callback, _client_data);
-        VSOMEIP_DEBUG << "Client TLSA Requested Service: " << clientdata_and_cbs->service_ << " for Client: " << clientdata_and_cbs->client_;
+        dns_resolver_->resolve(clientdata_and_cbs->dns_name_.c_str(), C_IN, T_TLSA, callback, _client_data);
+    }
+
+    void tlsa_resolver::add_service_request(std::string name, service_data_and_cbs* _service_data_and_cbs) {
+        std::lock_guard<std::mutex> lock(open_service_requests_mutex_);
+        open_service_requests_[name] = _service_data_and_cbs;
+    }
+
+    void tlsa_resolver::add_client_request(std::string name, client_data_and_cbs* _client_data_and_cbs) {
+        std::lock_guard<std::mutex> lock(open_client_requests_mutex_);
+        open_client_requests_[name] = _client_data_and_cbs;
+    }
+
+    void tlsa_resolver::close_service_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_service_requests_mutex_);
+        open_service_requests_.erase(name);
+    }
+
+    void tlsa_resolver::close_client_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_client_requests_mutex_);
+        open_client_requests_.erase(name);
+    }
+
+    bool tlsa_resolver::is_open_service_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_service_requests_mutex_);
+        return open_service_requests_.find(name) != open_service_requests_.end();
+    }
+
+    bool tlsa_resolver::is_open_client_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_client_requests_mutex_);
+        return open_client_requests_.find(name) != open_client_requests_.end();
     }
 } /* end namespace vsomeip_v3 */

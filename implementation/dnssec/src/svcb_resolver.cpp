@@ -69,6 +69,7 @@ namespace vsomeip_v3 {
 
             svcb_reply_ptr = svcb_reply_ptr->svcb_reply_next_;
         }
+        close_service_request(servicedata_and_cbs->dns_name_);
         delete[] copy;
         delete_svcb_reply(svcbreply);
     }
@@ -85,11 +86,6 @@ namespace vsomeip_v3 {
             return;
         }
 
-        // if (_timeouts) {
-        //     std::cerr << __func__ << " DNS request timeout" << std::endl;
-        //     delete clientdata_and_cbs;
-        //     return;
-        // }
         VSOMEIP_DEBUG << __func__ << " SVCB CLIENT RESPONSE RECEIVE";
         clientdata_and_cbs->record_timestamp_callback_(clientdata_and_cbs->service_,clientdata_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_RESPONSE_RECEIVE_);
 
@@ -123,6 +119,7 @@ namespace vsomeip_v3 {
 
             svcb_reply_ptr = svcb_reply_ptr->svcb_reply_next_;
         }
+        close_client_request(clientdata_and_cbs->dns_name_);
         delete[] copy;
         delete_svcb_reply(svcbreply);
     }
@@ -145,9 +142,15 @@ namespace vsomeip_v3 {
         request << "id0x" << std::hex << std::setw(4) << std::setfill('0') << (int) _service_data_and_cbs->service_;
         request << ".";
         request << SERVICE_PARENTDOMAIN;
+        _service_data_and_cbs->dns_name_ = request.str();
+        if (is_open_service_request(_service_data_and_cbs->dns_name_)) {
+            VSOMEIP_DEBUG << __func__ << " SVCB SERVICE REQUEST ALREADY OPEN for " << _service_data_and_cbs->dns_name_;
+            return;
+        }
+        add_service_request(_service_data_and_cbs->dns_name_, _service_data_and_cbs);
         _service_data_and_cbs->record_timestamp_callback_(_service_data_and_cbs->service_, _service_data_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_REQUEST_SEND_);
         resolver_callback callback = std::bind(&svcb_resolver::service_svcb_resolve_callback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
-        VSOMEIP_DEBUG << __func__ << "SVCB Requested Service: " << _service_data_and_cbs->service_;
+        VSOMEIP_DEBUG << __func__ << "SVCB SERVICE REQUEST SEND for " << _service_data_and_cbs->dns_name_;
         dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, callback, _service_data_and_cbs);
     }
 
@@ -167,9 +170,45 @@ namespace vsomeip_v3 {
         request << "id0x" << std::hex << std::setw(4) << std::setfill('0') << (int) _client_data_and_cbs->client_;
         request << ".";
         request << CLIENT_PARENTDOMAIN;
-        VSOMEIP_DEBUG << __func__ << " SVCB CLIENT REQUEST SEND";
+        _client_data_and_cbs->dns_name_ = request.str();
+        if (is_open_client_request(_client_data_and_cbs->dns_name_)) {
+            VSOMEIP_DEBUG << __func__ << " SVCB CLIENT REQUEST ALREADY OPEN for " << _client_data_and_cbs->dns_name_;
+            return;
+        }
+        add_client_request(_client_data_and_cbs->dns_name_, _client_data_and_cbs);
+        VSOMEIP_DEBUG << __func__ << " SVCB CLIENT REQUEST SEND for " << _client_data_and_cbs->dns_name_;
         _client_data_and_cbs->record_timestamp_callback_(_client_data_and_cbs->service_, _client_data_and_cbs->unverified_client_ipv4_address_.to_uint(), time_metric::SVCB_CLIENT_REQUEST_SEND_);
         resolver_callback callback = std::bind(&svcb_resolver::client_svcb_resolve_callback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
-        dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, callback, _client_data_and_cbs);
+        dns_resolver_->resolve(_client_data_and_cbs->dns_name_.c_str(), C_IN, T_SVCB, callback, _client_data_and_cbs);
+    }
+
+    void svcb_resolver::add_service_request(std::string name, service_data_and_cbs* _service_data_and_cbs) {
+        std::lock_guard<std::mutex> lock(open_service_requests_mutex_);
+        open_service_requests_[name] = _service_data_and_cbs;
+    }
+
+    void svcb_resolver::add_client_request(std::string name, client_data_and_cbs* _client_data_and_cbs) {
+        std::lock_guard<std::mutex> lock(open_client_requests_mutex_);
+        open_client_requests_[name] = _client_data_and_cbs;
+    }
+
+    void svcb_resolver::close_service_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_service_requests_mutex_);
+        open_service_requests_.erase(name);
+    }
+
+    void svcb_resolver::close_client_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_client_requests_mutex_);
+        open_client_requests_.erase(name);
+    }
+
+    bool svcb_resolver::is_open_service_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_service_requests_mutex_);
+        return open_service_requests_.find(name) != open_service_requests_.end();
+    }
+
+    bool svcb_resolver::is_open_client_request(std::string name) {
+        std::lock_guard<std::mutex> lock(open_client_requests_mutex_);
+        return open_client_requests_.find(name) != open_client_requests_.end();
     }
 } /* end namespace vsomeip_v3 */

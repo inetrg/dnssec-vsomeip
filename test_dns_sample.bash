@@ -18,7 +18,7 @@ nsd -c $nsd_base_dir/nsd/nsd.conf
 
 for i in $(seq 1 $num_instances)
 do
-    $dns_sample 50 "$i" > dns_sample_log/dns_sample_$i.log 2>&1 &
+    $dns_sample "$i" > dns_sample_log/dns_sample_$i.log 2>&1 &
 done
 wait
 

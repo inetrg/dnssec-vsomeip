@@ -35,6 +35,7 @@ namespace vsomeip_v3 {
         instance_t instance_;
         major_version_t major_;
         minor_version_t minor_;
+        std::string dns_name_;
         boost::asio::ip::address_v4 ipv4_address_;
         add_service_svcb_entry_cache_callback add_service_svcb_entry_cache_callback_;
         mimic_offerservice_serviceentry_callback mimic_offerservice_serviceentry_callback_;
@@ -58,6 +59,7 @@ namespace vsomeip_v3 {
             service_t service_;
             instance_t instance_;
             major_version_t major_;
+            std::string dns_name_;
             boost::asio::ip::address_v4 ipv4_address_;
             boost::asio::ip::address_v4 unverified_client_ipv4_address_;
             add_client_svcb_entry_cache_callback add_client_svcb_entry_cache_callback_;

@@ -3139,7 +3139,7 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
                                 && !_signature.empty();
 
     if (!requirements_are_fulfilled) {
-        VSOMEIP_DEBUG << __func__ << " REQUIREMENTS ARE NOT FULFILLED for client: " << _client << " service: " << _service << " instance: " << _instance << "certificate_data empty: " << certificate_data.empty() << " signed_nonce empty: " << signed_nonce.empty() << " signature empty: " << _signature.empty();
+        VSOMEIP_DEBUG << __func__ << " REQUIREMENTS ARE NOT FULFILLED for client: " << _client << " service: " << _service << " instance: " << _instance << " certificate_data empty: " << certificate_data.empty() << " signed_nonce empty: " << signed_nonce.empty() << " signature empty: " << _signature.empty();
         return;
     }
 
