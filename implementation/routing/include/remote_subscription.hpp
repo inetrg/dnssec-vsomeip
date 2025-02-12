@@ -35,6 +35,9 @@ public:
 
     VSOMEIP_EXPORT void reset(const std::set<client_t> &_clients);
 
+    VSOMEIP_EXPORT void set_valid(const bool _is_valid);
+    VSOMEIP_EXPORT bool is_valid() const;
+
     VSOMEIP_EXPORT bool is_initial() const;
     VSOMEIP_EXPORT void set_initial(const bool _is_initial);
 
@@ -116,6 +119,8 @@ private:
     // The endpoints defined by the endpoint options
     std::shared_ptr<endpoint_definition> reliable_;
     std::shared_ptr<endpoint_definition> unreliable_;
+
+    bool is_valid_ = false;
 
     // Number of acknowledgements that must be sent
     // for the subscriptions. This is usally 1, but

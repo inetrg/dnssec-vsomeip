@@ -209,6 +209,8 @@ private:
             instance_t _instance, eventgroup_t _eventgroup, uint8_t _counter,
             const std::set<client_t> &_clients);
 
+    void check_acknowledgements_complete_and_subscribe(std::shared_ptr<remote_subscription_ack> &_acknowledgement);
+
     bool send(const std::vector<std::shared_ptr<message_impl>> &_messages);
     bool serialize_and_send(
             const std::vector<std::shared_ptr<message_impl>> &_messages,

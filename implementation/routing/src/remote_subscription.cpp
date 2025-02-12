@@ -73,6 +73,16 @@ remote_subscription::reset(const std::set<client_t> &_clients) {
     }
 }
 
+void
+remote_subscription::set_valid(const bool _is_valid) {
+    is_valid_ = _is_valid;
+}
+
+bool 
+remote_subscription::is_valid() const {
+    return is_valid_;
+}
+
 bool
 remote_subscription::is_initial() const {
     return is_initial_;

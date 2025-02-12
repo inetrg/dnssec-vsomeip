@@ -1433,20 +1433,9 @@ service_discovery_impl::on_message(
 
             }
         }
-
-        {
-            std::unique_lock<std::recursive_mutex> its_lock(its_acknowledgement->get_lock());
-            its_acknowledgement->complete();
-            // TODO: Check the following logic...
-            if (its_acknowledgement->has_subscription()) {
-                update_acknowledgement(its_acknowledgement);
-            } else {
-                if (!its_acknowledgement->is_pending()
-                    && !its_acknowledgement->is_done()) {
-                    send_subscription_ack(its_acknowledgement);
-                }
-            }
-        }
+#ifndef WITH_CLIENT_AUTHENTICATION 
+        check_acknowledgements_complete_and_subscribe(its_acknowledgement);
+#endif
 
         // check resubscriptions for validity
         for (auto iter = its_resubscribes.begin(); iter != its_resubscribes.end();) {
@@ -3188,8 +3177,57 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
         eventgroup_subscriptioncache_entry.second_address_, eventgroup_subscriptioncache_entry.second_port_, eventgroup_subscriptioncache_entry.is_second_reliable_,
         eventgroup_subscriptioncache_entry.acknowledgement_, eventgroup_subscriptioncache_entry.is_stop_subscribe_subscribe_,
         eventgroup_subscriptioncache_entry.force_initial_events_, eventgroup_subscriptioncache_entry.clients_, _sd_ac_state, eventgroup_subscriptioncache_entry.info_);
+
+    auto subscriptions = eventgroup_subscriptioncache_entry.acknowledgement_->get_subscriptions();
+    for (auto &subscription : subscriptions) {
+        // todo: actually check which subscription we just validated...
+        std::string clients = "";
+        for (auto &client : subscription->get_clients()) {
+            clients += std::to_string(client) + " ";
+        }
+        std::string eventgroupinfo = "";
+        eventgroupinfo += "service: " + std::to_string(subscription->get_eventgroupinfo()->get_service()) + " ";
+        eventgroupinfo += "instance: " + std::to_string(subscription->get_eventgroupinfo()->get_instance()) + " ";
+        eventgroupinfo += "major: " + std::to_string(subscription->get_eventgroupinfo()->get_major()) + " ";
+        eventgroupinfo += "eventgroup: " + std::to_string(subscription->get_eventgroupinfo()->get_eventgroup()) + " ";
+        VSOMEIP_DEBUG << __func__ << " Validating subscription " << subscription->get_id() << " with clients [" << clients << "] and eventinfo [ " << eventgroupinfo << "] for client " << _client;
+        if (_service == subscription->get_eventgroupinfo()->get_service() &&
+            _instance == subscription->get_eventgroupinfo()->get_instance() &&
+            _major == subscription->get_eventgroupinfo()->get_major()
+            ) {
+            subscription->set_valid(true);
+        }
+    }
+
+    check_acknowledgements_complete_and_subscribe(eventgroup_subscriptioncache_entry.acknowledgement_);
 }
 #endif
+
+void 
+service_discovery_impl::check_acknowledgements_complete_and_subscribe(std::shared_ptr<remote_subscription_ack> &_acknowledgement) {
+    {
+        std::unique_lock<std::recursive_mutex> its_lock(_acknowledgement->get_lock());
+#if defined(WITH_CLIENT_AUTHENTICATION) 
+        auto subscriptions = _acknowledgement->get_subscriptions();
+        for (auto &subscription : subscriptions) {
+            if (!subscription->is_valid()) {
+                VSOMEIP_DEBUG << __func__ << " Subscription is not valid";
+                return;
+            }
+        }
+#endif
+        _acknowledgement->complete();
+        // TODO: Check the following logic...
+        if (_acknowledgement->has_subscription()) {
+            update_acknowledgement(_acknowledgement);
+        } else {
+            if (!_acknowledgement->is_pending()
+                && !_acknowledgement->is_done()) {
+                send_subscription_ack(_acknowledgement);
+            }
+        }
+    }
+}
 
 #ifdef WITH_SERVICE_AUTHENTICATION
 void
