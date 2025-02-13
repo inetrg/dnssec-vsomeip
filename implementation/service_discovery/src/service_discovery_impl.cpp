@@ -2541,20 +2541,20 @@ service_discovery_impl::process_eventgroupentry(
     ttl_t its_ttl = _entry->get_ttl();
 
     if (entry_type_e::SUBSCRIBE_EVENTGROUP == its_type && its_ttl > 0) {
-        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE RECEIVE";
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE RECEIVE for service " << its_service;
         statistics_recorder_->record_timestamp_for_service(its_service, _sender.to_v4().to_uint(), time_metric::SUBSCRIBE_RECEIVE_);
     }
 
 #ifdef WITH_SERVICE_AUTHENTICATION
     if (entry_type_e::SUBSCRIBE_EVENTGROUP_ACK == its_type && its_ttl > 0) {
-        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE";
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE for service " << its_service;
         statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
     }
 
 #else
     // Addition for statistics contribution Start #################################################################
     if (entry_type_e::SUBSCRIBE_EVENTGROUP_ACK == its_type && its_ttl > 0) {
-        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE";
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK RECEIVE for service " << its_service;
         statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_ACK_RECEIVE_);
     }
     // Addition for statistics contribution End ###################################################################
