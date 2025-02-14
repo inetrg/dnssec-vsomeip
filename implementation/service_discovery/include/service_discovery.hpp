@@ -122,7 +122,7 @@ public:
     // Additional Method for Service Authenticity Start ######################################################################
     virtual void validate_subscribe_and_verify_signature(
         client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address,
-        service_t _service, instance_t _instance, major_version_t _major) = 0;
+        service_t _service, instance_t _instance, major_version_t _major, bool _is_nonsequential_dnsresponse) = 0;
     // Additional Method for Service Authenticity End ########################################################################
 #endif
     // Addition for statistics recorder Start ###############################################################################

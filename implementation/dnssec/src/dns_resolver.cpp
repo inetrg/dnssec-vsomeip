@@ -141,7 +141,7 @@ int dns_resolver::initialize() {
         initialized_ = true;
         process_thread_ = std::thread(&dns_resolver::process, this);
         LOG_DEBUG("Process Thread is initialized")
-        VSOMEIP_DEBUG << __func__ << " Successfully initialized" << std::endl;
+        VSOMEIP_DEBUG << __func__ << " DNS resolver successfully initialized" << std::endl;
     } else {
         LOG_DEBUG("Process Thread is already initialized")
     }

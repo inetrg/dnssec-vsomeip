@@ -51,7 +51,7 @@ namespace vsomeip_v3 {
     // struct client_data_and_callbacks
     typedef std::function<void(client_t, service_t, instance_t, major_version_t, int, const boost::asio::ip::address_v4, std::set<port_t>)> add_client_svcb_entry_cache_callback;
     typedef std::function<void(void*)> request_client_tlsa_record_callback;
-    typedef std::function<void(client_t, boost::asio::ip::address_v4, service_t, instance_t, major_version_t)> validate_subscribe_and_verify_signature_callback;
+    typedef std::function<void(client_t, boost::asio::ip::address_v4, service_t, instance_t, major_version_t, bool)> validate_subscribe_and_verify_signature_callback;
     typedef std::function<void(client_t, boost::asio::ip::address_v4, vsomeip_v3::service_t, vsomeip_v3::instance_t, std::vector<unsigned char>)> add_subscriber_certificate_callback;
     struct client_data_and_cbs {
         public:

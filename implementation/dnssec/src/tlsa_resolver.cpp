@@ -82,7 +82,7 @@ namespace vsomeip_v3 {
             tlsa_reply_ptr = tlsa_reply_ptr->tlsa_reply_next_;
         }
         VSOMEIP_DEBUG << "Client TLSA Resolved Service: " << clientdata_and_cbs->service_ << " for Client: " << clientdata_and_cbs->client_;
-        clientdata_and_cbs->validate_subscribe_and_verify_signature_callback_(clientdata_and_cbs->client_, clientdata_and_cbs->ipv4_address_, clientdata_and_cbs->service_, clientdata_and_cbs->instance_, clientdata_and_cbs->major_);
+        clientdata_and_cbs->validate_subscribe_and_verify_signature_callback_(clientdata_and_cbs->client_, clientdata_and_cbs->ipv4_address_, clientdata_and_cbs->service_, clientdata_and_cbs->instance_, clientdata_and_cbs->major_, true);
         close_client_request(clientdata_and_cbs->dns_name_);
         delete clientdata_and_cbs;
         delete[] copy;

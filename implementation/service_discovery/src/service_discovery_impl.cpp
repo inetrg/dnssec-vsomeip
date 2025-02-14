@@ -1433,7 +1433,8 @@ service_discovery_impl::on_message(
 
             }
         }
-#ifndef WITH_CLIENT_AUTHENTICATION 
+
+#if !defined(WITH_DNSSEC) && !defined(WITH_DANE)
         check_acknowledgements_complete_and_subscribe(its_acknowledgement);
 #endif
 
@@ -2995,7 +2996,7 @@ service_discovery_impl::process_eventgroupentry(
         if (its_ttl > 0) {
             // Service Authentication Start ##########################################################################
             eventgroup_subscription_cache_->add_eventgroup_subscription_cache_entry(client, its_service, its_instance, its_eventgroup, its_major, its_ttl, 0, 0, its_first_address, its_first_port, is_first_reliable, its_second_address, its_second_port, is_second_reliable, _acknowledgement, _is_stop_subscribe_subscribe, _force_initial_events, its_clients, _sd_ac_state.expired_ports_, _sd_ac_state.sd_acceptance_required_, _sd_ac_state.accept_entries_, its_info, signed_nonce, blinded_secret, signature);
-            validate_subscribe_and_verify_signature(client, _sender.to_v4(), its_service, its_instance, its_major);
+            validate_subscribe_and_verify_signature(client, _sender.to_v4(), its_service, its_instance, its_major, false);
         } else {
             handle_eventgroup_subscription(its_service, its_instance,
                 its_eventgroup, its_major, its_ttl, 0, 0,
@@ -3082,7 +3083,8 @@ service_discovery_impl::process_authentication_for_received_subscribe(
                                                 std::placeholders::_2,
                                                 std::placeholders::_3,
                                                 std::placeholders::_4,
-                                                std::placeholders::_5);
+                                                std::placeholders::_5,
+                                                std::placeholders::_6);
         tlsa_resolver_->request_client_tlsa_record(clientdata_and_cbs);
     }
     #endif
@@ -3110,7 +3112,7 @@ service_discovery_impl::process_authentication_for_received_subscribe_ack(
 #if defined(WITH_CLIENT_AUTHENTICATION) && defined(WITH_SERVICE_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
 void
 service_discovery_impl::validate_subscribe_and_verify_signature(
-        client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address, service_t _service, instance_t _instance, major_version_t _major) {
+        client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address, service_t _service, instance_t _instance, major_version_t _major, bool _is_nonsequential_dnsresponse) {
     std::lock_guard<std::mutex> subscribe_lock(process_subscribe_mutex_);
     VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE START";
     uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
@@ -3199,7 +3201,9 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
         }
     }
 
+#if defined(WITH_DNSSEC) && defined(WITH_DANE)
     check_acknowledgements_complete_and_subscribe(eventgroup_subscriptioncache_entry.acknowledgement_);
+#endif
 }
 #endif
 
@@ -3211,11 +3215,13 @@ service_discovery_impl::check_acknowledgements_complete_and_subscribe(std::share
         auto subscriptions = _acknowledgement->get_subscriptions();
         for (auto &subscription : subscriptions) {
             if (!subscription->is_valid()) {
+                // todo fix unsubscribe never validated
                 VSOMEIP_DEBUG << __func__ << " Subscription is not valid";
                 return;
             }
         }
 #endif
+        VSOMEIP_DEBUG << __func__ << " Subscription acknowledgement is complete";
         _acknowledgement->complete();
         // TODO: Check the following logic...
         if (_acknowledgement->has_subscription()) {

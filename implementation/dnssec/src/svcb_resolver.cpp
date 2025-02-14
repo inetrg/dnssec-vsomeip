@@ -150,7 +150,7 @@ namespace vsomeip_v3 {
         add_service_request(_service_data_and_cbs->dns_name_, _service_data_and_cbs);
         _service_data_and_cbs->record_timestamp_callback_(_service_data_and_cbs->service_, _service_data_and_cbs->its_unicast_.to_uint(), time_metric::SVCB_SERVICE_REQUEST_SEND_);
         resolver_callback callback = std::bind(&svcb_resolver::service_svcb_resolve_callback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
-        VSOMEIP_DEBUG << __func__ << "SVCB SERVICE REQUEST SEND for " << _service_data_and_cbs->dns_name_;
+        VSOMEIP_DEBUG << __func__ << " SVCB SERVICE REQUEST SEND for " << _service_data_and_cbs->dns_name_;
         dns_resolver_->resolve(request.str().c_str(), C_IN, T_SVCB, callback, _service_data_and_cbs);
     }
 

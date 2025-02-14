@@ -520,7 +520,7 @@ public:
     // Additional Method for Service Authenticity Start ######################################################################
     void validate_subscribe_and_verify_signature(
         client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address,
-        service_t _service, instance_t _instance, major_version_t _major);
+        service_t _service, instance_t _instance, major_version_t _major, bool _is_nonsequential_dnsresponse = false);
     // Additional Method for Service Authenticity End ########################################################################
 #endif
     void set_statistics_recorder(std::shared_ptr<statistics_recorder> _statistics_recorder);

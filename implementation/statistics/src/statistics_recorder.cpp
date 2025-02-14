@@ -73,13 +73,13 @@ void statistics_recorder::record_custom_timestamp_for_service(service_id_t _serv
         entries_complete = (_time_metric == time_metric::SUBSCRIBE_ACK_SEND_) || (_time_metric == time_metric::SUBSCRIBE_ACK_RECEIVE_);
 #endif
         if (entries_complete) {
-            VSOMEIP_DEBUG << __func__ << " Entries completed for service " << _service_id << " host " << _host_ip;
+            VSOMEIP_DEBUG << "[<statistics_recorder>] (" << __func__ << " Entries completed for service " << _service_id << " host " << _host_ip;
             if (entries_complete_.count(_service_id) == 0) {
                 entries_complete_[_service_id] = std::set<host_key_t>();
             }
             entries_complete_[_service_id].insert(_host_ip);
             if (check_services_complete() && !already_contributed_) {
-                VSOMEIP_DEBUG << __func__ << " All services completed ... contributing ";
+                VSOMEIP_DEBUG << "[<statistics_recorder>] (" << __func__ << " All services completed ... contributing ";
                 // all services are complete
                 // contribute statistics
                 std::thread(&statistics_recorder::contribute_statistics, this).detach();
@@ -139,8 +139,8 @@ void statistics_recorder::contribute_statistics() {
             }
             condition.notify_one();
         } catch (boost::interprocess::interprocess_exception& interprocess_exception) {
-            std::cerr << __func__ << interprocess_exception.what() << std::endl;
-            VSOMEIP_ERROR << __func__ << interprocess_exception.what();
+            std::cerr << "[<statistics_recorder>] (" << __func__ << interprocess_exception.what() << std::endl;
+            VSOMEIP_ERROR << "[<statistics_recorder>] (" << __func__ << interprocess_exception.what();
             std::cout << "[<statistics_recorder>] (" << __func__ << ") shared objects may not created yet or segment size is not enough. Examine error message for exact cause." << std::endl;
             VSOMEIP_ERROR << "[<statistics_recorder>] (" << __func__ << ") shared objects may not created yet or segment size is not enough. Examine error message for exact cause.";
             sleep(1);
@@ -155,12 +155,12 @@ bool statistics_recorder::check_services_complete() {
     bool complete = true;
     for (auto service_entry : required_hosts_) {
         if (entries_complete_.count(service_entry.first) == 0) {
-            VSOMEIP_DEBUG << __func__ << " Service " << service_entry.first << " has no entries";
+            VSOMEIP_DEBUG << "[<statistics_recorder>] (" << __func__ << " Service " << service_entry.first << " has no entries";
             complete = false;
             break;
         }
         if (entries_complete_[service_entry.first].size() != service_entry.second) {
-            VSOMEIP_DEBUG << __func__ << " Service " << service_entry.first << " has not all entries: " << entries_complete_[service_entry.first].size() << " != required " << service_entry.second;
+            VSOMEIP_DEBUG << "[<statistics_recorder>] (" << __func__ << " Service " << service_entry.first << " has not all entries: " << entries_complete_[service_entry.first].size() << " != required " << service_entry.second;
             complete = false;
             break;
         }
