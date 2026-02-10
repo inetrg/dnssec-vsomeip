@@ -78,9 +78,20 @@ remote_subscription_ack::add_subscription(
     subscriptions_.insert(_subscription);
 }
 
+void 
+remote_subscription_ack::remove_subscription(
+        const std::shared_ptr<remote_subscription> &_subscription) {
+    subscriptions_.erase(_subscription);
+}
+
 bool
 remote_subscription_ack::has_subscription() const {
     return (0 < subscriptions_.size());
+}
+
+bool
+remote_subscription_ack::has_multiple_subscriptions() const {
+    return (1 < subscriptions_.size());
 }
 
 std::unique_lock<std::recursive_mutex> remote_subscription_ack::get_lock() {

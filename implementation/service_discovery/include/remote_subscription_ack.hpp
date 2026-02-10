@@ -43,7 +43,10 @@ public:
     std::set<std::shared_ptr<remote_subscription> > get_subscriptions() const;
     void add_subscription(
             const std::shared_ptr<remote_subscription> &_subscription);
+    void remove_subscription(
+            const std::shared_ptr<remote_subscription> &_subscription);
     bool has_subscription() const;
+    bool has_multiple_subscriptions() const;
 
     std::unique_lock<std::recursive_mutex> get_lock();
 

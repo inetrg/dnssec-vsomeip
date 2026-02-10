@@ -54,10 +54,10 @@ statistics_recorder::~statistics_recorder() {
 void statistics_recorder::record_custom_timestamp_for_service(service_id_t _service_id, uint32_t _host_ip, time_metric _time_metric, uint64_t _timestamp) {
     // check if stats for service are complete and mark them
     bool entries_complete = false;
+    std::lock_guard<std::mutex> lock_guard(mutex_);
     if (already_contributed_) {
         return;
     }
-    std::lock_guard<std::mutex> lock_guard(mutex_);
     if (!time_statistics_.count(_service_id)) {
         time_statistics_[_service_id] = host_time_stats_t();
     }
@@ -78,7 +78,7 @@ void statistics_recorder::record_custom_timestamp_for_service(service_id_t _serv
                 entries_complete_[_service_id] = std::set<host_key_t>();
             }
             entries_complete_[_service_id].insert(_host_ip);
-            if (check_services_complete() && !already_contributed_) {
+            if (check_services_complete()) {
                 VSOMEIP_DEBUG << "[<statistics_recorder>] (" << __func__ << " All services completed ... contributing ";
                 // all services are complete
                 // contribute statistics

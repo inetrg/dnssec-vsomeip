@@ -22,14 +22,19 @@ public:
             app_(vsomeip::runtime::get()->create_application()), 
             use_tcp_(_use_tcp), 
             service_id_(SAMPLE_SERVICE_ID), 
-            instance_id_(SAMPLE_INSTANCE_ID) {
+            instance_id_(SAMPLE_INSTANCE_ID),
+            event_group_id_(SAMPLE_EVENTGROUP_ID),
+            event_id_(SAMPLE_EVENT_ID) {
     }
 
-    my_subscriber_app(bool _use_tcp, uint16_t _service_id, uint16_t _instance_id) :
+    my_subscriber_app(bool _use_tcp, uint16_t _service_id, uint16_t _instance_id, 
+                      uint16_t _event_group_id, uint16_t _event_id) :
             app_(vsomeip::runtime::get()->create_application()), 
             use_tcp_(_use_tcp), 
             service_id_(_service_id), 
-            instance_id_(_instance_id) {
+            instance_id_(_instance_id),
+            event_group_id_(_event_group_id),
+            event_id_(_event_id){
     }
 
     bool init() {
@@ -56,21 +61,17 @@ public:
                           this,
                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
-        // todo fix event group -- make parameters?
-        uint16_t event_group_id = 30000+service_id_;
-        uint16_t event_id = 10000+service_id_;
-
         std::set<vsomeip::eventgroup_t> its_groups;
-        its_groups.insert(event_group_id);
+        its_groups.insert(event_group_id_);
         app_->request_event(
                 service_id_,
                 instance_id_,
-                event_id,
+                event_id_,
                 its_groups,
                 vsomeip::event_type_e::ET_FIELD,
                 vsomeip::reliability_type_e::RT_UNRELIABLE);
-        app_->subscribe(service_id_, instance_id_, event_group_id);  
-        app_->request_service(service_id_, instance_id_);
+        app_->subscribe(service_id_, instance_id_, event_group_id_,0);  
+        app_->request_service(service_id_, instance_id_,0,0);
 
         return true;
     }
@@ -129,6 +130,8 @@ private:
     bool use_tcp_;
     uint16_t service_id_;
     uint16_t instance_id_;
+    uint16_t event_group_id_;
+    uint16_t event_id_;
 };
 
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
@@ -144,11 +147,15 @@ int main(int argc, char **argv) {
     bool use_tcp = false;
     uint16_t service_id = SAMPLE_SERVICE_ID;
     uint16_t instance_id = SAMPLE_INSTANCE_ID;
+    uint16_t event_group_id = SAMPLE_EVENT_ID;
+    uint16_t event_id = SAMPLE_EVENTGROUP_ID;
 
     std::string tcp_enable("--tcp");
     std::string udp_enable("--udp");
     std::string service_arg("--serviceid");
     std::string instance_arg("--instanceid");
+    std::string event_arg("--eventid");
+    std::string event_group_arg("--eventgroupid");
 
     for (int i = 1; i < argc; i++) {
         if (tcp_enable == argv[i]) {
@@ -169,9 +176,21 @@ int main(int argc, char **argv) {
             converter << argv[i];
             converter >> instance_id;
         }
+        else if (event_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> event_id;
+        }
+        else if (event_group_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> event_group_id;
+        }
     }
 
-    my_subscriber_app subscriber_app(use_tcp, service_id, instance_id);
+    my_subscriber_app subscriber_app(use_tcp, service_id, instance_id, event_group_id, event_id);
 #ifndef VSOMEIP_ENABLE_SIGNAL_HANDLING
     subscriber_app_ptr = &subscriber_app;
     signal(SIGINT, handle_signal);

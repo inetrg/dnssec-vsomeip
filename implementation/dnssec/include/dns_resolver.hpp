@@ -36,6 +36,8 @@ public:
     void cleanup();
     void resolve(const char* _name, int _dnsclass, int _type, resolver_callback _callback, void* _arg);
     int change_dns_server(in_addr_t _address);
+    void async_callback(dns_request* _query, int _status, int _timeouts,
+                        unsigned char* _abuf, int _alen);
 protected:
 private:
     int initialize();
@@ -47,6 +49,7 @@ private:
     std::thread process_thread_;
     std::condition_variable condition_variable_;
     std::mutex mutex_;
+    std::mutex callback_mutex_;
     void process();
     in_addr_t address_;
     std::deque<dns_request*> dns_requests_;

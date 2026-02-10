@@ -69,7 +69,7 @@ namespace vsomeip_v3 {
 
             svcb_reply_ptr = svcb_reply_ptr->svcb_reply_next_;
         }
-        close_service_request(servicedata_and_cbs->dns_name_);
+        // close_service_request(servicedata_and_cbs->dns_name_);
         delete[] copy;
         delete_svcb_reply(svcbreply);
     }
@@ -119,7 +119,7 @@ namespace vsomeip_v3 {
 
             svcb_reply_ptr = svcb_reply_ptr->svcb_reply_next_;
         }
-        close_client_request(clientdata_and_cbs->dns_name_);
+        // close_client_request(clientdata_and_cbs->dns_name_);
         delete[] copy;
         delete_svcb_reply(svcbreply);
     }

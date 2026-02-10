@@ -613,7 +613,7 @@ void routing_manager_impl::request_service(client_t _client, service_t _service,
         instance_t _instance, major_version_t _major, minor_version_t _minor) {
 #ifdef WITH_DNSSEC
     //Addition for Service Authentication Start ##########################################################################
-    discovery_->request_svcb(_service, _instance, _major, _minor);
+    discovery_->request_svcb(_service, _instance, 0, 0);
     //Addition for Service Authentication End ############################################################################
 #endif
 

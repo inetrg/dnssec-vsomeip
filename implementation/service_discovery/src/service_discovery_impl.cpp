@@ -1017,7 +1017,7 @@ service_discovery_impl::create_eventgroup_entry(
 
     // Addition for timestamp recording Start ###########################################################
     if(_subscription->get_ttl()) {
-        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE SEND";
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE SEND for service " << _service;
         statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_SEND_);
     }
     // Addition for timestamp recording End #############################################################
@@ -1196,7 +1196,7 @@ service_discovery_impl::insert_subscription_ack(
 
     // Addition for statistics contribution Start #################################################################
     if(_ttl) {
-        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK SEND";
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE ACK SEND for service " << its_service << " to subscriber " << subscriber_address.to_string();
         statistics_recorder_->record_timestamp_for_service(its_service, subscriber_address.to_uint(), time_metric::SUBSCRIBE_ACK_SEND_);
     }
     // Addition for statistics contribution End ###################################################################
@@ -1434,7 +1434,8 @@ service_discovery_impl::on_message(
             }
         }
 
-#if !defined(WITH_DNSSEC) && !defined(WITH_DANE)
+// #if !defined(WITH_DANE)
+#if !defined(WITH_CLIENT_AUTHENTICATION) 
         check_acknowledgements_complete_and_subscribe(its_acknowledgement);
 #endif
 
@@ -1490,7 +1491,7 @@ service_discovery_impl::process_serviceentry(
     if (is_requested) { // only log offer time-stamps for requested services
         if(its_type == entry_type_e::OFFER_SERVICE && its_ttl > 0) {
             statistics_recorder_->record_timestamp_for_service(its_service, unicast_.to_v4().to_uint(), time_metric::OFFER_RECEIVE_);
-            VSOMEIP_DEBUG << __func__ << " OFFER RECEIVE";
+            VSOMEIP_DEBUG << __func__ << " OFFER RECEIVE for service " << its_service;
         }
     }
     // }
@@ -1963,6 +1964,7 @@ service_discovery_impl::process_offerservice_serviceentry(
             if (required_services.count(std::make_pair(_service, _instance)) > 0) {
                 VSOMEIP_DEBUG << __func__ << ": Offer for required but not yet requested service ["
                     << _service << "." << _instance << "]";
+            validate_offer(_service, _instance, _major, _minor);
         }
     }
 #endif
@@ -1978,7 +1980,7 @@ service_discovery_impl::validate_offer(service_t _service, instance_t _instance,
     service_svcb_cache_entry service_svcbcache_entry = svcb_cache_->get_service_svcb_cache_entry(_service, _instance, _major, _minor);
     bool early_return = false;
     if (service_svcbcache_entry.service_ == service_t(-1)) {
-        request_svcb(_service, _instance, _major, _minor);
+        request_svcb(_service, _instance, 0, 0);
         VSOMEIP_DEBUG << __func__ << ": Offer verification not possible, requesting SVCB record for ["
                 << _service << "." << _instance
                 << "]";
@@ -2272,7 +2274,7 @@ service_discovery_impl::process_findservice_serviceentry(
         service_t _service, instance_t _instance,
         major_version_t _major, minor_version_t _minor,
         bool _unicast_flag) {
-    VSOMEIP_DEBUG << __func__ << " FIND RECEIVE";
+    VSOMEIP_DEBUG << __func__ << " FIND RECEIVE for service " << _service;
     if (_instance != ANY_INSTANCE) {
         std::shared_ptr<serviceinfo> its_info = host_->get_offered_service(
                 _service, _instance);
@@ -2480,7 +2482,7 @@ service_discovery_impl::insert_offer_service(
             generate_and_add_nonce_for_offer_entry(_info->get_service(), _info->get_instance(), its_data);
         // Service Authentication End ##################################
 #endif
-        VSOMEIP_DEBUG << __func__ << " OFFER SEND";
+        VSOMEIP_DEBUG << __func__ << " OFFER SEND for service " << _info->get_service();
         add_entry_data(_messages, its_data);
     } else {
         VSOMEIP_ERROR << __func__ << ": Failed to create service entry.";
@@ -2542,7 +2544,7 @@ service_discovery_impl::process_eventgroupentry(
     ttl_t its_ttl = _entry->get_ttl();
 
     if (entry_type_e::SUBSCRIBE_EVENTGROUP == its_type && its_ttl > 0) {
-        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE RECEIVE for service " << its_service;
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE RECEIVE for service " << its_service << " from client " << _sender.to_string();
         statistics_recorder_->record_timestamp_for_service(its_service, _sender.to_v4().to_uint(), time_metric::SUBSCRIBE_RECEIVE_);
     }
 
@@ -2994,8 +2996,35 @@ service_discovery_impl::process_eventgroupentry(
     if (entry_type_e::SUBSCRIBE_EVENTGROUP == its_type) {
 #if defined(WITH_CLIENT_AUTHENTICATION) && defined(WITH_SERVICE_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
         if (its_ttl > 0) {
+            auto current_ack = _acknowledgement;
+// #if defined(WITH_DANE)
+            // parse a dedicated acknowledgement for this subscription
+            // if (_acknowledgement->has_multiple_subscriptions()) {
+                // VSOMEIP_DEBUG << __func__ << " has multiple subscriptions in _acknowledgement";
+                current_ack = std::make_shared<remote_subscription_ack>(_acknowledgement->get_target_address());
+                VSOMEIP_DEBUG << __func__ << " replaced current ack for client: " << client;
+                auto subscriptions = _acknowledgement->get_subscriptions();
+                for (auto &subscription : subscriptions) {
+                    // find the current subscription in the old _acknowledgement
+                    if (its_service == subscription->get_eventgroupinfo()->get_service() &&
+                        its_instance == subscription->get_eventgroupinfo()->get_instance() &&
+                        its_major == subscription->get_eventgroupinfo()->get_major()) {
+                        // add the subscription to the new _acknowledgement
+                        current_ack->add_subscription(subscription);
+                        // remove the subscription from the old _acknowledgement
+                        _acknowledgement->remove_subscription(subscription);
+                        VSOMEIP_DEBUG << __func__ << " found subscription for service: "
+                                      << std::hex << std::setw(4) << its_service
+                                      << ", instance: " << std::hex << std::setw(4) << its_instance
+                                      << ", major: " << std::hex << std::setw(4) << its_major
+                                      << " for client: " << client;
+                        break;
+                    }
+                }
+            // }
+// #endif
             // Service Authentication Start ##########################################################################
-            eventgroup_subscription_cache_->add_eventgroup_subscription_cache_entry(client, its_service, its_instance, its_eventgroup, its_major, its_ttl, 0, 0, its_first_address, its_first_port, is_first_reliable, its_second_address, its_second_port, is_second_reliable, _acknowledgement, _is_stop_subscribe_subscribe, _force_initial_events, its_clients, _sd_ac_state.expired_ports_, _sd_ac_state.sd_acceptance_required_, _sd_ac_state.accept_entries_, its_info, signed_nonce, blinded_secret, signature);
+            eventgroup_subscription_cache_->add_eventgroup_subscription_cache_entry(client, its_service, its_instance, its_eventgroup, its_major, its_ttl, 0, 0, its_first_address, its_first_port, is_first_reliable, its_second_address, its_second_port, is_second_reliable, current_ack, _is_stop_subscribe_subscribe, _force_initial_events, its_clients, _sd_ac_state.expired_ports_, _sd_ac_state.sd_acceptance_required_, _sd_ac_state.accept_entries_, its_info, signed_nonce, blinded_secret, signature);
             validate_subscribe_and_verify_signature(client, _sender.to_v4(), its_service, its_instance, its_major, false);
         } else {
             handle_eventgroup_subscription(its_service, its_instance,
@@ -3181,29 +3210,37 @@ service_discovery_impl::validate_subscribe_and_verify_signature(
         eventgroup_subscriptioncache_entry.force_initial_events_, eventgroup_subscriptioncache_entry.clients_, _sd_ac_state, eventgroup_subscriptioncache_entry.info_);
 
     auto subscriptions = eventgroup_subscriptioncache_entry.acknowledgement_->get_subscriptions();
+    if (subscriptions.empty()) {
+        VSOMEIP_DEBUG << __func__ << " NO SUBSCRIPTIONS to validate ";
+    } else if (subscriptions.size() > 1) {
+        VSOMEIP_DEBUG << __func__ << " MULTIPLE SUBSCRIPTIONS (" << subscriptions.size() << ") to validate ";
+    } else {
+        VSOMEIP_DEBUG << __func__ << " SINGLE SUBSCRIPTION to validate ";
+    }
     for (auto &subscription : subscriptions) {
         // todo: actually check which subscription we just validated...
-        std::string clients = "";
-        for (auto &client : subscription->get_clients()) {
-            clients += std::to_string(client) + " ";
-        }
-        std::string eventgroupinfo = "";
-        eventgroupinfo += "service: " + std::to_string(subscription->get_eventgroupinfo()->get_service()) + " ";
-        eventgroupinfo += "instance: " + std::to_string(subscription->get_eventgroupinfo()->get_instance()) + " ";
-        eventgroupinfo += "major: " + std::to_string(subscription->get_eventgroupinfo()->get_major()) + " ";
-        eventgroupinfo += "eventgroup: " + std::to_string(subscription->get_eventgroupinfo()->get_eventgroup()) + " ";
-        VSOMEIP_DEBUG << __func__ << " Validating subscription " << subscription->get_id() << " with clients [" << clients << "] and eventinfo [ " << eventgroupinfo << "] for client " << _client;
         if (_service == subscription->get_eventgroupinfo()->get_service() &&
             _instance == subscription->get_eventgroupinfo()->get_instance() &&
             _major == subscription->get_eventgroupinfo()->get_major()
             ) {
             subscription->set_valid(true);
+            std::string clients = "";
+            for (auto &client : subscription->get_clients()) {
+                clients += std::to_string(client) + " ";
+            }
+            std::string eventgroupinfo = "";
+            eventgroupinfo += "service: " + std::to_string(subscription->get_eventgroupinfo()->get_service()) + " ";
+            eventgroupinfo += "instance: " + std::to_string(subscription->get_eventgroupinfo()->get_instance()) + " ";
+            eventgroupinfo += "major: " + std::to_string(subscription->get_eventgroupinfo()->get_major()) + " ";
+            eventgroupinfo += "eventgroup: " + std::to_string(subscription->get_eventgroupinfo()->get_eventgroup()) + " ";
+            VSOMEIP_DEBUG << __func__ << " Validating subscription " << subscription->get_id() << " with clients [" << clients << "] and eventinfo [ " << eventgroupinfo << "] for client " << _client;
+            break;
         }
     }
 
-#if defined(WITH_DNSSEC) && defined(WITH_DANE)
+// #if defined(WITH_DANE)
     check_acknowledgements_complete_and_subscribe(eventgroup_subscriptioncache_entry.acknowledgement_);
-#endif
+// #endif
 }
 #endif
 
@@ -3214,10 +3251,21 @@ service_discovery_impl::check_acknowledgements_complete_and_subscribe(std::share
 #if defined(WITH_CLIENT_AUTHENTICATION) 
         auto subscriptions = _acknowledgement->get_subscriptions();
         for (auto &subscription : subscriptions) {
+            std::string clients = "";
+            for (auto &client : subscription->get_clients()) {
+                clients += std::to_string(client) + " ";
+            }
+            std::string eventgroupinfo = "";
+            eventgroupinfo += "service: " + std::to_string(subscription->get_eventgroupinfo()->get_service()) + " ";
+            eventgroupinfo += "instance: " + std::to_string(subscription->get_eventgroupinfo()->get_instance()) + " ";
+            eventgroupinfo += "major: " + std::to_string(subscription->get_eventgroupinfo()->get_major()) + " ";
+            eventgroupinfo += "eventgroup: " + std::to_string(subscription->get_eventgroupinfo()->get_eventgroup()) + " ";
             if (!subscription->is_valid()) {
                 // todo fix unsubscribe never validated
-                VSOMEIP_DEBUG << __func__ << " Subscription is not valid";
+                VSOMEIP_DEBUG << __func__ << " Subscription is not valid : " << subscription->get_id() << " with clients [" << clients << "] and eventinfo [ " << eventgroupinfo << "]";
                 return;
+            } else {
+                VSOMEIP_DEBUG << __func__ << " Subscription is valid : " << subscription->get_id() << " with clients [" << clients << "] and eventinfo [ " << eventgroupinfo << "]";
             }
         }
 #endif
@@ -3268,6 +3316,7 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
 
 
     if (!requirements_are_fulfilled) {
+        VSOMEIP_DEBUG << __func__ << " REQUIREMENTS ARE NOT FULFILLED for service: " << _service << " instance: " << _instance << " certificate_data empty: " << certificate_data.empty() << " signed_nonce empty: " << signed_nonce.empty() << " signature empty: " << signature.empty();
         return;
     }
 
@@ -3280,6 +3329,7 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
                                  && challenge_nonce_cache_->has_subscriber_challenge_nonce_and_remove(_publisher_ip_address, _service, _instance, eventgroup_subscriptionackcache_entry.nonce_);
 
     if (!subscription_ack_validated) {
+        VSOMEIP_WARNING << __func__ << " SUBSCRIPTION ACK NOT VALIDATED for service: " << _service << " instance: " << _instance;
         return;
     }
 #endif
@@ -3305,6 +3355,7 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
     signature_verified = crypto_operator_.verify(public_key, data_to_be_verified);
 
     if (!signature_verified) {
+        VSOMEIP_WARNING << __func__ << " SIGNATURE NOT VERIFIED for service: " << _service << " instance: " << _instance;
         return;
     }
     
@@ -3313,7 +3364,7 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
     statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_END_);
 
     // Addition for statistics contribution End ###################################################################
-    eventgroup_subscription_ack_cache_->remove_eventgroup_subscription_ack_cache_entry(_publisher_ip_address, _service, _instance);
+    // eventgroup_subscription_ack_cache_->remove_eventgroup_subscription_ack_cache_entry(_publisher_ip_address, _service, _instance);
 #if defined(WITH_ENCRYPTION) && defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
     VSOMEIP_DEBUG << __func__ << " DECRYPT GROUP SECRET";
     encrypted_group_secret_result encrypted_groupsecret_result;

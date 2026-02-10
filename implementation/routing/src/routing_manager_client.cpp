@@ -2547,7 +2547,7 @@ routing_manager_client::assign_client_timeout_cbk(
         }
         if (register_again) {
             std::lock_guard<std::mutex> its_lock(sender_mutex_);
-            VSOMEIP_WARNING << std::hex << "Client 0x" << get_client()
+            VSOMEIP_WARNING << "(decimal " << get_client() << ")" << std::hex << "Client 0x" << get_client() 
                     << " request client timeout! Trying again...";
 
             if (sender_) {
