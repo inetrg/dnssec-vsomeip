@@ -49,6 +49,7 @@ private:
     std::thread process_thread_;
     std::condition_variable condition_variable_;
     std::mutex mutex_;
+    std::mutex initialize_mutex_;
     std::mutex callback_mutex_;
     void process();
     in_addr_t address_;
