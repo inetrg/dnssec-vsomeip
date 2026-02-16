@@ -1828,7 +1828,7 @@ service_discovery_impl::process_offerservice_serviceentry(
     if (!its_runtime)
         return;
     
-    std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
+    // std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
     bool is_secure = configuration_->is_secure_service(_service, _instance);
     if (is_secure &&
             ((_reliable_port != ILLEGAL_PORT &&
@@ -2035,7 +2035,7 @@ service_discovery_impl::resume_process_offerservice_serviceentry(
     bool _received_via_mcast) {
 
     // NOTE: Code below belongs actually in to the process_offerservice_serviceentry method above
-    std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
+    // std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
     // No need to resubscribe for unicast offers
     if (_received_via_mcast) {
         auto found_service = subscribed_.find(_service);
@@ -3070,7 +3070,7 @@ void
 service_discovery_impl::process_authentication_for_received_subscribe(
         std::shared_ptr<configuration_option_impl> _configuration_option, const boost::asio::ip::address& _sender, service_t _service, instance_t _instance, major_version_t _major,
         std::vector<unsigned char>& _signed_nonce, std::vector<unsigned char>& _signature, client_t& _client, std::vector<unsigned char>& _blinded_secret) {
-    std::lock_guard<std::mutex> subscribe_lock(process_subscribe_mutex_);
+    // std::lock_guard<std::mutex> subscribe_lock(process_subscribe_mutex_);
     std::vector<unsigned char> generated_nonce = data_partitioner().reassemble_data<std::vector<unsigned char>>(GENERATED_NONCE_CONFIG_OPTION_KEY, _configuration_option);
     challenge_nonce_cache_->add_subscriber_challenge_nonce(_sender.to_v4(), _service, _instance, generated_nonce);
 #if defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
@@ -3322,14 +3322,15 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
 
 #if defined(WITH_DNSSEC)
     bool subscription_ack_validated = false;
-    subscription_ack_validated = (service_svcbcache_entry.service_ ==  eventgroup_subscriptionackcache_entry.service_)
-                                 && (service_svcbcache_entry.instance_ == eventgroup_subscriptionackcache_entry.instance_)
-                                 && (service_svcbcache_entry.major_ == eventgroup_subscriptionackcache_entry.major_version_)
-                                 && (service_svcbcache_entry.ipv4_address_ == eventgroup_subscriptionackcache_entry.sender_ip_address_)
-                                 && challenge_nonce_cache_->has_subscriber_challenge_nonce_and_remove(_publisher_ip_address, _service, _instance, eventgroup_subscriptionackcache_entry.nonce_);
+    bool service_match =service_svcbcache_entry.service_ ==  eventgroup_subscriptionackcache_entry.service_;
+    bool instance_match = service_svcbcache_entry.instance_ == eventgroup_subscriptionackcache_entry.instance_;
+    bool major_version_match = service_svcbcache_entry.major_ == eventgroup_subscriptionackcache_entry.major_version_;
+    bool ipv4_match = service_svcbcache_entry.ipv4_address_ == eventgroup_subscriptionackcache_entry.sender_ip_address_;
+    bool challenge_nonce_valid = challenge_nonce_cache_->has_subscriber_challenge_nonce_and_remove(_publisher_ip_address, _service, _instance, eventgroup_subscriptionackcache_entry.nonce_);
+    subscription_ack_validated = (service_match) && (instance_match) && (major_version_match) && (ipv4_match) && challenge_nonce_valid;
 
     if (!subscription_ack_validated) {
-        VSOMEIP_WARNING << __func__ << " SUBSCRIPTION ACK NOT VALIDATED for service: " << _service << " instance: " << _instance;
+        VSOMEIP_WARNING << __func__ << " SUBSCRIPTION ACK NOT VALIDATED for service: " << _service << " instance: " << _instance << " service_match: " << service_match << " instance_match: " << instance_match << " major_version_match: " << major_version_match << " ipv4_match: " << ipv4_match << " challenge_nonce_valid: " << challenge_nonce_valid;
         return;
     }
 #endif

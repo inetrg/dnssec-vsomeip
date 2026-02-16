@@ -1,5 +1,6 @@
 #include "../include/challenge_nonce_cache.hpp"
 #include <iostream>
+#include <vsomeip/internal/logger.hpp>
 
 namespace vsomeip_v3 {
     challenge_nonce_cache::challenge_nonce_cache() {
@@ -20,8 +21,16 @@ namespace vsomeip_v3 {
                         vsomeip_v3::instance_t _instance, std::vector<unsigned char> _nonce) {
         std::lock_guard<std::mutex> guard(mutex_);
         auto key_tuple = make_key_tuple(_ipv4_address, _service, _instance);
-        bool has_nonce = subscriber_challenge_nonce_map_.count(key_tuple) && !subscriber_challenge_nonce_map_[key_tuple].nonce_.empty() && subscriber_challenge_nonce_map_[key_tuple].nonce_ == _nonce;
-        if (has_nonce) { subscriber_challenge_nonce_map_[key_tuple].nonce_.clear(); }
+        bool has_nonce = false;
+        if (subscriber_challenge_nonce_map_.count(key_tuple) && !subscriber_challenge_nonce_map_[key_tuple].nonce_.empty()) {
+            has_nonce = subscriber_challenge_nonce_map_[key_tuple].nonce_ == _nonce;
+            if (!has_nonce) {
+                VSOMEIP_WARNING << __func__ << " Nonces not matching for service: " << _service << " instance: " << _instance << " ipv4_address: " << _ipv4_address.to_string();
+            }
+        } else {
+            VSOMEIP_WARNING << __func__ << " No entry found in subscriber_challenge_nonce_map_ for service: " << _service << " instance: " << _instance << " ipv4_address: " << _ipv4_address.to_string();
+        }
+        // if (has_nonce) { subscriber_challenge_nonce_map_[key_tuple].nonce_.clear(); }
         return has_nonce;
     }
 
@@ -63,8 +72,16 @@ namespace vsomeip_v3 {
     bool challenge_nonce_cache::has_publisher_challenge_nonce_and_remove(client_t _client, boost::asio::ip::address_v4 _ipv4_address, vsomeip_v3::service_t _service, vsomeip_v3::instance_t _instance, std::vector<unsigned char> _nonce) {
         std::lock_guard<std::mutex> guard(mutex_);
         auto key_tuple = make_key_tuple(_client, _ipv4_address, _service, _instance);
-        bool has_nonce = publisher_challenge_nonce_map_.count(key_tuple) && !publisher_challenge_nonce_map_[key_tuple].nonce_.empty() && publisher_challenge_nonce_map_[key_tuple].nonce_ == _nonce;
-        if (has_nonce) { publisher_challenge_nonce_map_[key_tuple].nonce_.clear(); }
+        bool has_nonce = false;
+        if (publisher_challenge_nonce_map_.count(key_tuple) && !publisher_challenge_nonce_map_[key_tuple].nonce_.empty()) {
+            has_nonce = publisher_challenge_nonce_map_[key_tuple].nonce_ == _nonce;
+            if (!has_nonce) {
+                VSOMEIP_WARNING << __func__ << " Nonces not matching for client: " << _client << " service: " << _service << " instance: " << _instance << " ipv4_address: " << _ipv4_address.to_string();
+            }
+        } else {
+            VSOMEIP_WARNING << __func__ << " No entry found in publisher_challenge_nonce_map_ for client: " << _client << " service: " << _service << " instance: " << _instance << " ipv4_address: " << _ipv4_address.to_string();
+        }
+        // if (has_nonce) { publisher_challenge_nonce_map_[key_tuple].nonce_.clear(); }
         return has_nonce;
     }
 
