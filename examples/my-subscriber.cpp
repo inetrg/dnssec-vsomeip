@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <fstream>
 
 #include <vsomeip/vsomeip.hpp>
 
@@ -149,6 +150,7 @@ int main(int argc, char **argv) {
     uint16_t instance_id = SAMPLE_INSTANCE_ID;
     uint16_t event_group_id = SAMPLE_EVENT_ID;
     uint16_t event_id = SAMPLE_EVENTGROUP_ID;
+    uint16_t client_id = 0;
 
     std::string tcp_enable("--tcp");
     std::string udp_enable("--udp");
@@ -156,6 +158,7 @@ int main(int argc, char **argv) {
     std::string instance_arg("--instanceid");
     std::string event_arg("--eventid");
     std::string event_group_arg("--eventgroupid");
+    std::string client_arg("--clientid");
 
     for (int i = 1; i < argc; i++) {
         if (tcp_enable == argv[i]) {
@@ -188,6 +191,12 @@ int main(int argc, char **argv) {
             converter << argv[i];
             converter >> event_group_id;
         }
+        else if (client_arg == argv[i] && i + 1 < argc) {
+            i++;
+            std::stringstream converter;
+            converter << argv[i];
+            converter >> client_id;
+        }
     }
 
     my_subscriber_app subscriber_app(use_tcp, service_id, instance_id, event_group_id, event_id);
@@ -197,6 +206,9 @@ int main(int argc, char **argv) {
     signal(SIGTERM, handle_signal);
 #endif
     if (subscriber_app.init()) {
+        std::ofstream subscriber_initialized_file;
+        subscriber_initialized_file.open("/home/vm-user/workspace/mininet-vsomeip-evaluation/subscriber-initialized-"+std::to_string(service_id)+"-"+std::to_string(client_id));
+        subscriber_initialized_file.close();
         subscriber_app.start();
         return 0;
     } else {
