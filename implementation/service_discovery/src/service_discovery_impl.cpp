@@ -3284,6 +3284,26 @@ service_discovery_impl::check_acknowledgements_complete_and_subscribe(std::share
 }
 
 #ifdef WITH_SERVICE_AUTHENTICATION
+bool validate_data_and_signature(
+        std::vector<unsigned char> signed_nonce,
+#if defined(WITH_ENCRYPTION) && defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
+        std::vector<unsigned char>& blinded_secret, std::vector<unsigned char>& encrypted_group_secret,std::vector<unsigned char>& initialization_vector,
+# endif
+        std::vector<unsigned char>& signature,
+        CryptoPP::RSA::PublicKey& public_key,
+        crypto_operator& crypto_operator
+) {
+    std::vector<byte_t> data_to_be_verified;
+    data_to_be_verified.insert(data_to_be_verified.end(), signed_nonce.begin(), signed_nonce.end());
+#if defined(WITH_ENCRYPTION) && defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
+    data_to_be_verified.insert(data_to_be_verified.end(), blinded_secret.begin(), blinded_secret.end());
+    data_to_be_verified.insert(data_to_be_verified.end(), encrypted_group_secret.begin(), encrypted_group_secret.end());
+    data_to_be_verified.insert(data_to_be_verified.end(), initialization_vector.begin(), initialization_vector.end());
+#endif
+    data_to_be_verified.insert(data_to_be_verified.end(), signature.begin(), signature.end());
+    return crypto_operator.verify(public_key, data_to_be_verified);
+}
+
 void
 service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio::ip::address_v4 _publisher_ip_address, service_t _service, instance_t _instance, major_version_t _major) {
     std::lock_guard<std::recursive_mutex> subscribe_lock(subscribed_mutex_);
@@ -3302,8 +3322,9 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
 #endif
 
     std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_publisher_certificate(_publisher_ip_address, _service, _instance);
-    std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_subscriber_challenge_nonce(_publisher_ip_address, _service, _instance);
+    // std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_subscriber_challenge_nonce(_publisher_ip_address, _service, _instance);
     eventgroup_subscription_ack_cache_entry eventgroup_subscriptionackcache_entry = eventgroup_subscription_ack_cache_->get_eventgroup_subscription_ack_cache_entry(_publisher_ip_address, _service, _instance);
+    std::vector<unsigned char> signed_nonce = eventgroup_subscriptionackcache_entry.nonce_;
     std::vector<unsigned char> signature = eventgroup_subscriptionackcache_entry.signature_;
     requirements_are_fulfilled = !certificate_data.empty()
                                 && !signed_nonce.empty()
@@ -3340,21 +3361,16 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
     if (!crypto_operator_.extract_public_key_from_certificate(certificate_data, public_key)) {
         return;
     }
-    std::vector<byte_t> data_to_be_verified;
 #if defined(WITH_ENCRYPTION) && defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
     std::vector<unsigned char> blinded_secret = eventgroup_subscriptionackcache_entry.blinded_secret_;
     std::vector<unsigned char> encrypted_group_secret = eventgroup_subscriptionackcache_entry.encrypted_group_secret_;
     std::vector<unsigned char> initialization_vector = eventgroup_subscriptionackcache_entry.initialization_vector_;
 #endif
-    data_to_be_verified.insert(data_to_be_verified.end(), signed_nonce.begin(), signed_nonce.end());
+    signature_verified = validate_data_and_signature(signed_nonce,
 #if defined(WITH_ENCRYPTION) && defined(WITH_CLIENT_AUTHENTICATION) && !defined(NO_SOMEIP_SD)
-    data_to_be_verified.insert(data_to_be_verified.end(), blinded_secret.begin(), blinded_secret.end());
-    data_to_be_verified.insert(data_to_be_verified.end(), encrypted_group_secret.begin(), encrypted_group_secret.end());
-    data_to_be_verified.insert(data_to_be_verified.end(), initialization_vector.begin(), initialization_vector.end());
+        blinded_secret, encrypted_group_secret, initialization_vector,
 #endif
-    data_to_be_verified.insert(data_to_be_verified.end(), signature.begin(), signature.end());
-    signature_verified = crypto_operator_.verify(public_key, data_to_be_verified);
-
+        signature, public_key, crypto_operator_);
     if (!signature_verified) {
         VSOMEIP_WARNING << __func__ << " SIGNATURE NOT VERIFIED for service: " << _service << " instance: " << _instance;
         return;
