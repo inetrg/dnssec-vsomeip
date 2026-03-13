@@ -5,6 +5,8 @@
 #include <thread>
 #include "../../configuration/include/configuration.hpp"
 
+// #define RESTRICTED_STATISTIC_RECORDING
+
 std::mutex statistics_recorder::mutex_;
 statistics_recorder* statistics_recorder::instance_;
 
@@ -51,9 +53,37 @@ statistics_recorder::statistics_recorder() {
 statistics_recorder::~statistics_recorder() {
 }
 
+#ifdef RESTRICTED_STATISTIC_RECORDING
+bool is_restricted_metic_set(time_metric _time_metric) {
+    // check if the metric is in the restricted recording setting
+    if (_time_metric == time_metric::PUBLISHER_APP_INITIALIZATION_ 
+        || _time_metric == time_metric::SUBSCRIBER_APP_INITIALIZATION_START_
+        || _time_metric == time_metric::SUBSCRIBER_APP_INITIALIZATION_END_
+        || _time_metric == time_metric::OFFER_RECEIVE_
+#ifdef WITH_SERVICE_AUTHENTICATION
+        || _time_metric == time_metric::SUBSCRIBE_ACK_SEND_
+        || _time_metric == time_metric::VERIFY_SERVICE_SIGNATURE_END_
+#else
+        || _time_metric == time_metric::SUBSCRIBE_ACK_SEND_
+        || _time_metric == time_metric::SUBSCRIBE_ACK_RECEIVE_
+#endif
+        ) {
+        return true;
+    }
+    return false;
+}
+#endif
+
 void statistics_recorder::record_custom_timestamp_for_service(service_id_t _service_id, uint32_t _host_ip, time_metric _time_metric, uint64_t _timestamp) {
     // check if stats for service are complete and mark them
     bool entries_complete = false;
+
+#ifdef RESTRICTED_STATISTIC_RECORDING
+    if (!is_restricted_metic_set(_time_metric)) {
+        return;
+    }
+#endif
+
     std::lock_guard<std::mutex> lock_guard(mutex_);
     if (already_contributed_) {
         return;

@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <vsomeip/internal/logger.hpp>
+#include <arpa/nameser.h>
 
 #define EDNSPKSZ 1280 // https://datatracker.ietf.org/doc/html/rfc6891
 
@@ -16,41 +17,41 @@ void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _ab
     switch (_status)
     {
     case ARES_SUCCESS:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " succeeded" << std::endl;
+        VSOMEIP_DEBUG << __func__ << " Query for " << query->name_ << " succeeded";
         break;
     case ARES_ECONNREFUSED:
-        VSOMEIP_DEBUG << __func__ << " Connection refused for query: " << query->name_ << std::endl;
+        VSOMEIP_DEBUG << __func__ << " Connection refused for query: " << query->name_;
         retry = true;
         break;
     case ARES_ENODATA:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " returned no data" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " returned no data";
         break;
     case ARES_EFORMERR:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed due to a format error" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed due to a format error";
         break;
     case ARES_ESERVFAIL:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed due to a server failure" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed due to a server failure";
         break;
     case ARES_ENOTFOUND:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the name was not found" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the name was not found";
         break;
     case ARES_ENOTIMP:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the query type is not implemented" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the query type is not implemented";
         break;
     case ARES_EREFUSED:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the server refused the query" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the server refused the query";
         break;
     case ARES_ETIMEOUT:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because as it timed out" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because as it timed out";
         break;
     case ARES_ENOMEM:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because of memory allocation failure" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because of memory allocation failure";
         break;
     case ARES_EDESTRUCTION:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the channel was destroyed" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed because the channel was destroyed";
         break;    
     default:
-        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed due to an unknown error" << std::endl;
+        VSOMEIP_DEBUG << __func__ << "Query for " << query->name_ << " could not be completed due to an unknown error";
         break;
     }
 
@@ -74,7 +75,9 @@ void cares_callback (void* _data, int _status, int _timeouts, unsigned char* _ab
 void dns_resolver::async_callback(dns_request* _query, int _status, int _timeouts,
                 unsigned char* _abuf, int _alen) {
     // copy data to an application buffer
-    VSOMEIP_DEBUG << __func__ << " Received data for query: " << _query->name_;
+    std::string rq_type = (_query->type_ == T_TLSA) ? "TLSA" : ((_query->type_ == 64) ? "SVCB" : "OTHER");
+
+    VSOMEIP_DEBUG << __func__ << " Received data for " << rq_type << " query: " << _query->name_;
     unsigned char* _abuf_copy = new unsigned char[_alen];
     memcpy(_abuf_copy, _abuf, _alen);
     // launch callback in a new thread and detach it
@@ -157,7 +160,6 @@ int dns_resolver::initialize() {
         }
         ares_destroy_options(&options);
         if (change_dns_server(address_) != ARES_SUCCESS) {
-            std::cout << "Setting servers failed" << std::endl;
             VSOMEIP_DEBUG << __func__ << " Setting servers failed";
             return 1;
         }
@@ -187,13 +189,11 @@ void dns_resolver::process() {
                 }
                 dns_request = dns_requests_.front();
                 dns_requests_.pop_front();
-                std::cout << process_id_ << " Request popped from queue, new size: " << dns_requests_.size() << std::endl;
-                VSOMEIP_DEBUG << __func__ << " Request popped from queue, new size: " << dns_requests_.size();
+                VSOMEIP_DEBUG << __func__ << process_id_ << " Request popped from queue, new size: " << dns_requests_.size();
             }
             lookups++;
             ares_search(channel_, dns_request->name_, dns_request->dnsclass_, dns_request->type_, cares_callback, dns_request);
-            std::cout << process_id_ << " processed request " << lookups << std::endl;
-            VSOMEIP_DEBUG << __func__ << " processed request " << lookups;
+            VSOMEIP_DEBUG << __func__ << process_id_ << " processed request " << lookups;
         }
     }
     VSOMEIP_DEBUG << __func__ << " DNS process thread terminated";
@@ -222,8 +222,7 @@ void dns_resolver::cleanup() {
         process_thread_.join();
         ares_destroy(channel_);
         ares_library_cleanup();
-        std::cout << "Cleanup finished" << std::endl;
-        VSOMEIP_DEBUG << __func__ << " Cleanup finished" << std::endl;
+        VSOMEIP_DEBUG << __func__ << process_id_ << " Cleanup finished";
         initialized_ = false;
     }
 }

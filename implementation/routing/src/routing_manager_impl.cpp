@@ -2995,6 +2995,7 @@ void routing_manager_impl::on_remote_subscribe(
         } else { // identical subscription is not yet processed
             std::stringstream its_warning;
             its_warning << __func__ << " a remote subscription is already pending ["
+                << its_service << "." << its_instance << "." << its_eventgroup << "]=["
                 << std::hex << std::setfill('0')
                 << std::setw(4) << its_service << "."
                 << std::setw(4) << its_instance << "."
