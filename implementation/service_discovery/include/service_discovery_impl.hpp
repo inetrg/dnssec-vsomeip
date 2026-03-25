@@ -33,6 +33,7 @@
 #ifdef WITH_SERVICE_AUTHENTICATION
 // Additional includes for service authentication
 #include "../../service_authentication/include/crypto_operator.hpp"
+#include "../../service_authentication/include/requester_authentication_cache.hpp"
 #endif
 
 namespace vsomeip_v3 {
@@ -547,6 +548,7 @@ private:
     std::shared_ptr<challenge_nonce_cache> challenge_nonce_cache_;
     std::shared_ptr<eventgroup_subscription_cache> eventgroup_subscription_cache_;
     std::shared_ptr<eventgroup_subscription_ack_cache> eventgroup_subscription_ack_cache_;
+        std::shared_ptr<requester_authentication_cache> requester_authentication_cache_;
     crypto_operator crypto_operator_;
     #if defined(WITH_DNSSEC) && defined(WITH_DANE)
     std::shared_ptr<tlsa_resolver> tlsa_resolver_;

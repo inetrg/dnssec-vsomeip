@@ -97,6 +97,9 @@ service_discovery_impl::service_discovery_impl(
                                            (VSOMEIP_SD_DEFAULT_CYCLIC_OFFER_DELAY / 10))
        {
     next_subscription_expiration_ = std::chrono::steady_clock::now() + std::chrono::hours(24);
+#ifdef WITH_SERVICE_AUTHENTICATION
+    requester_authentication_cache_ = std::make_shared<requester_authentication_cache>();
+#endif
 }
 
 service_discovery_impl::~service_discovery_impl() {
@@ -856,11 +859,15 @@ service_discovery_impl::create_eventgroup_entry(
                 insert_unreliable = true;
             } else {
                 VSOMEIP_WARNING << __func__ << ": Cannot create subscription as "
-                        "unreliable endpoint is zero: ["
+                        "unreliable endpoint is zero: "
+                        << "dec: " << _service << "." << _instance << "." << _eventgroup
+                         << " hex: [" 
                         << std::hex << std::setfill('0')
                         << std::setw(4) << _service << "."
                         << std::setw(4) << _instance << "."
-                        << std::setw(4) << _eventgroup << "]";
+                        << std::setw(4) << _eventgroup << "]"
+                        << " reliable: " << !!its_reliable_endpoint
+                        << " unreliable: " << !!its_unreliable_endpoint; 
             }
             break;
         case reliability_type_e::RT_BOTH:
@@ -3142,61 +3149,84 @@ service_discovery_impl::process_authentication_for_received_subscribe_ack(
 void
 service_discovery_impl::validate_subscribe_and_verify_signature(
         client_t _client, boost::asio::ip::address_v4 _subscriber_ip_address, service_t _service, instance_t _instance, major_version_t _major, bool _is_nonsequential_dnsresponse) {
+    (void)_is_nonsequential_dnsresponse;
     std::lock_guard<std::mutex> subscribe_lock(process_subscribe_mutex_);
     VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE START";
     uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
-    bool requirements_are_fulfilled = false;
+    eventgroup_subscription_cache_entry eventgroup_subscriptioncache_entry =
+            eventgroup_subscription_cache_->get_eventgroup_subscription_cache_entry(
+                    _client, _service, _instance, _major);
+
+    bool skip_signature_verification = requester_authentication_cache_
+            && requester_authentication_cache_->has_validated_subscription(
+                    _client, _subscriber_ip_address, _service, _instance, _major);
+
+    if (skip_signature_verification
+            && !eventgroup_subscriptioncache_entry.acknowledgement_) {
+        requester_authentication_cache_->remove_requester(_subscriber_ip_address);
+        skip_signature_verification = false;
+    }
+
+    if (skip_signature_verification) {
+        VSOMEIP_DEBUG << __func__
+                << " SKIP CLIENT SIGNATURE VERIFICATION for cached requester";
+    } else {
+        bool requirements_are_fulfilled = false;
 #if !defined(WITH_DANE)
-    auto client_certificates = configuration_->get_client_certificates(_service, _instance);
-    challenge_nonce_cache_->add_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance, client_certificates.at(_client));
+        auto client_certificates = configuration_->get_client_certificates(_service, _instance);
+        challenge_nonce_cache_->add_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance, client_certificates.at(_client));
 #endif
-    std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance);
-    std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_publisher_challenge_nonce(_client, _subscriber_ip_address, _service, _instance);
-    eventgroup_subscription_cache_entry eventgroup_subscriptioncache_entry = eventgroup_subscription_cache_->get_eventgroup_subscription_cache_entry(_client, _service, _instance, _major);
-    std::vector<unsigned char> _signature = eventgroup_subscriptioncache_entry.signature_;
-    requirements_are_fulfilled = !certificate_data.empty()
-                                && !signed_nonce.empty()
-                                && !_signature.empty();
+        std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_subscriber_certificate(_client, _subscriber_ip_address, _service, _instance);
+        std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_publisher_challenge_nonce(_client, _subscriber_ip_address, _service, _instance);
+        std::vector<unsigned char> _signature = eventgroup_subscriptioncache_entry.signature_;
+        requirements_are_fulfilled = !certificate_data.empty()
+                                    && !signed_nonce.empty()
+                                    && !_signature.empty();
 
-    if (!requirements_are_fulfilled) {
-        VSOMEIP_DEBUG << __func__ << " REQUIREMENTS ARE NOT FULFILLED for client: " << _client << " service: " << _service << " instance: " << _instance << " certificate_data empty: " << certificate_data.empty() << " signed_nonce empty: " << signed_nonce.empty() << " signature empty: " << _signature.empty();
-        return;
+        if (!requirements_are_fulfilled) {
+            VSOMEIP_DEBUG << __func__ << " REQUIREMENTS ARE NOT FULFILLED for client: " << _client << " service: " << _service << " instance: " << _instance << " certificate_data empty: " << certificate_data.empty() << " signed_nonce empty: " << signed_nonce.empty() << " signature empty: " << _signature.empty();
+            return;
+        }
+
+        bool signature_verified = false;
+        CryptoPP::RSA::PublicKey public_key;
+        if (!crypto_operator_.extract_public_key_from_certificate(certificate_data, public_key)) {
+            return;
+        }
+
+#ifdef WITH_ENCRYPTION
+        std::vector<unsigned char> blinded_secret = eventgroup_subscriptioncache_entry.blinded_secret_;
+#endif
+        std::vector<byte_t> data_to_be_verified;
+        data_to_be_verified.insert(data_to_be_verified.end(), signed_nonce.begin(), signed_nonce.end());
+#ifdef WITH_ENCRYPTION
+        data_to_be_verified.insert(data_to_be_verified.end(), blinded_secret.begin(), blinded_secret.end());
+#endif
+        data_to_be_verified.insert(data_to_be_verified.end(), _signature.begin(), _signature.end());
+        signature_verified = crypto_operator_.verify(public_key, data_to_be_verified);
+
+        if (!signature_verified) {
+            return;
+        }
+        VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE END";
+        statistics_recorder_->record_custom_timestamp_for_service(_service, _subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_START_, verify_start_time);
+        statistics_recorder_->record_timestamp_for_service(_service, _subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_END_);
+#ifdef WITH_ENCRYPTION
+        VSOMEIP_DEBUG << __func__ << " COMPUTE ENCRYPTED GROUP SECRET";
+        encrypted_group_secret_result encrypted_groupsecret_result = dh_ecc_->compute_encrypted_group_secret(CryptoPP::SecByteBlock(blinded_secret.data(), blinded_secret.size()));
+        encrypted_group_secret_result_cache_->add_encrypted_group_secret_result(_subscriber_ip_address, _service, _instance, _major, encrypted_groupsecret_result);
+#endif
+
+#ifdef WITH_ENCRYPTION
+        CryptoPP::SecByteBlock group_secret = dh_ecc_->get_group_secret();
+        std::tuple<service_t, instance_t> key_tuple = std::make_tuple(_service, _instance);
+        group_secrets_.operator*()[key_tuple] = group_secret;
+#endif
+
+        requester_authentication_cache_->mark_validated_subscription(
+                _client, _subscriber_ip_address, _service, _instance, _major);
     }
 
-    bool signature_verified = false;
-    CryptoPP::RSA::PublicKey public_key;
-    if (!crypto_operator_.extract_public_key_from_certificate(certificate_data, public_key)) {
-        return;
-    }
-
-#ifdef WITH_ENCRYPTION
-    std::vector<unsigned char> blinded_secret = eventgroup_subscriptioncache_entry.blinded_secret_;
-#endif
-    std::vector<byte_t> data_to_be_verified;
-    data_to_be_verified.insert(data_to_be_verified.end(), signed_nonce.begin(), signed_nonce.end());
-#ifdef WITH_ENCRYPTION
-    data_to_be_verified.insert(data_to_be_verified.end(), blinded_secret.begin(), blinded_secret.end());
-#endif
-    data_to_be_verified.insert(data_to_be_verified.end(), _signature.begin(), _signature.end());
-    signature_verified = crypto_operator_.verify(public_key, data_to_be_verified);
-
-    if (!signature_verified) {
-        return;
-    }
-    VSOMEIP_DEBUG << __func__ << " VERIFY CLIENT SIGNATURE END";
-    statistics_recorder_->record_custom_timestamp_for_service(_service, _subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_START_, verify_start_time);
-    statistics_recorder_->record_timestamp_for_service(_service, _subscriber_ip_address.to_uint(), time_metric::VERIFY_CLIENT_SIGNATURE_END_);
-#ifdef WITH_ENCRYPTION
-    VSOMEIP_DEBUG << __func__ << " COMPUTE ENCRYPTED GROUP SECRET";
-    encrypted_group_secret_result encrypted_groupsecret_result = dh_ecc_->compute_encrypted_group_secret(CryptoPP::SecByteBlock(blinded_secret.data(), blinded_secret.size()));
-    encrypted_group_secret_result_cache_->add_encrypted_group_secret_result(_subscriber_ip_address, _service, _instance, _major, encrypted_groupsecret_result);
-#endif
-
-#ifdef WITH_ENCRYPTION
-    CryptoPP::SecByteBlock group_secret = dh_ecc_->get_group_secret();
-    std::tuple<service_t, instance_t> key_tuple = std::make_tuple(_service, _instance);
-    group_secrets_.operator*()[key_tuple] = group_secret;
-#endif
     sd_acceptance_state_t _sd_ac_state(eventgroup_subscriptioncache_entry.expired_ports_);
     _sd_ac_state.sd_acceptance_required_ = eventgroup_subscriptioncache_entry.sd_acceptance_required_;
     _sd_ac_state.accept_entries_ = eventgroup_subscriptioncache_entry.accept_entries_;
@@ -3310,6 +3340,37 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
     std::lock_guard<std::mutex> process_subscribe_ack_lock(process_susbcribe_ack_mutex_);
     VSOMEIP_DEBUG << __func__ << " VERIFY SERVICE SIGNATURE START";
     uint64_t verify_start_time = static_cast<metric_value_t>(std::chrono::system_clock::now().time_since_epoch().count());
+    eventgroup_subscription_ack_cache_entry eventgroup_subscriptionackcache_entry =
+            eventgroup_subscription_ack_cache_->get_eventgroup_subscription_ack_cache_entry(
+                    _publisher_ip_address, _service, _instance);
+    bool skip_signature_verification = requester_authentication_cache_
+            && requester_authentication_cache_->has_validated_subscription_ack(
+                    _publisher_ip_address, _service, _instance, _major);
+
+    if (skip_signature_verification) {
+        bool has_cached_ack_entry = eventgroup_subscriptionackcache_entry.service_ == _service
+                && eventgroup_subscriptionackcache_entry.instance_ == _instance
+                && eventgroup_subscriptionackcache_entry.major_version_ == _major
+                && eventgroup_subscriptionackcache_entry.sender_ip_address_ == _publisher_ip_address;
+        if (has_cached_ack_entry) {
+            VSOMEIP_DEBUG << __func__
+                    << " SKIP SERVICE SIGNATURE VERIFICATION for cached requester";
+            handle_eventgroup_subscription_ack(eventgroup_subscriptionackcache_entry.service_,
+                                                eventgroup_subscriptionackcache_entry.instance_,
+                                                eventgroup_subscriptionackcache_entry.eventgroup_,
+                                                eventgroup_subscriptionackcache_entry.major_version_,
+                                                eventgroup_subscriptionackcache_entry.ttl_,
+                                                0,
+                                                eventgroup_subscriptionackcache_entry.clients_,
+                                                eventgroup_subscriptionackcache_entry.sender_ip_address_,
+                                                eventgroup_subscriptionackcache_entry.first_ip_address_,
+                                                eventgroup_subscriptionackcache_entry.port_);
+            return;
+        }
+
+        // requester_authentication_cache_->remove_requester(_publisher_ip_address);
+    }
+
     // Check if required subscription ack, signature and certificate are available/cached
     bool requirements_are_fulfilled = false;
 #if defined(WITH_DNSSEC)
@@ -3323,7 +3384,6 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
 
     std::vector<byte_t> certificate_data = challenge_nonce_cache_->get_publisher_certificate(_publisher_ip_address, _service, _instance);
     // std::vector<unsigned char> signed_nonce = challenge_nonce_cache_->get_subscriber_challenge_nonce(_publisher_ip_address, _service, _instance);
-    eventgroup_subscription_ack_cache_entry eventgroup_subscriptionackcache_entry = eventgroup_subscription_ack_cache_->get_eventgroup_subscription_ack_cache_entry(_publisher_ip_address, _service, _instance);
     std::vector<unsigned char> signed_nonce = eventgroup_subscriptionackcache_entry.nonce_;
     std::vector<unsigned char> signature = eventgroup_subscriptionackcache_entry.signature_;
     requirements_are_fulfilled = !certificate_data.empty()
@@ -3379,6 +3439,7 @@ service_discovery_impl::validate_subscribe_ack_and_verify_signature(boost::asio:
     VSOMEIP_DEBUG << __func__ << " VERIFY SERVICE SIGNATURE END";
     statistics_recorder_->record_custom_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_START_, verify_start_time);
     statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::VERIFY_SERVICE_SIGNATURE_END_);
+    requester_authentication_cache_->mark_validated_subscription_ack(_publisher_ip_address, _service, _instance, _major);
 
     // Addition for statistics contribution End ###################################################################
     // eventgroup_subscription_ack_cache_->remove_eventgroup_subscription_ack_cache_entry(_publisher_ip_address, _service, _instance);
