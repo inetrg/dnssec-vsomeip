@@ -1024,7 +1024,8 @@ service_discovery_impl::create_eventgroup_entry(
 
     // Addition for timestamp recording Start ###########################################################
     if(_subscription->get_ttl()) {
-        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE SEND for service " << _service;
+        // Entry creation does not guarantee wire transmission. Keep this as a preparation marker.
+        VSOMEIP_DEBUG << __func__ << " SUBSCRIBE PREPARED for service " << _service;
         statistics_recorder_->record_timestamp_for_service(_service, unicast_.to_v4().to_uint(), time_metric::SUBSCRIBE_SEND_);
     }
     // Addition for timestamp recording End #############################################################
@@ -2043,6 +2044,14 @@ service_discovery_impl::resume_process_offerservice_serviceentry(
 
     // NOTE: Code below belongs actually in to the process_offerservice_serviceentry method above
     // std::lock_guard<std::recursive_mutex> its_lock(process_offer_mutex_);
+
+    // Ensure routing info is available before creating resubscribe entries.
+    host_->add_routing_info(_service, _instance,
+                            _major, _minor,
+                            _ttl * get_ttl_factor(_service, _instance, ttl_factor_offers_),
+                            _reliable_address, _reliable_port,
+                            _unreliable_address, _unreliable_port);
+
     // No need to resubscribe for unicast offers
     if (_received_via_mcast) {
         auto found_service = subscribed_.find(_service);
@@ -2086,11 +2095,6 @@ service_discovery_impl::resume_process_offerservice_serviceentry(
         }
     }
 
-    host_->add_routing_info(_service, _instance,
-                            _major, _minor,
-                            _ttl * get_ttl_factor(_service, _instance, ttl_factor_offers_),
-                            _reliable_address, _reliable_port,
-                            _unreliable_address, _unreliable_port);
 }
 #else
 void
@@ -3815,6 +3819,14 @@ service_discovery_impl::serialize_and_send(
                             serializer_->get_data(), serializer_->get_size(),
                             port_)) {
                         increment_session(_address);
+                    } else {
+                        VSOMEIP_WARNING << "service_discovery_impl::" << __func__
+                                << ": send_via_sd failed for ["
+                                << std::hex << std::setfill('0')
+                                << std::setw(4) << m->get_service() << "."
+                                << std::setw(4) << m->get_instance() << "] to "
+                                << _address.to_string() << ":" << std::dec << port_;
+                        its_result = false;
                     }
                 } else {
                     VSOMEIP_ERROR << "service_discovery_impl::" << __func__
